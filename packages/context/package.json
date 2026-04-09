@@ -14,5 +14,8 @@
   "scripts": {
     "build": "tsc --emitDeclarationOnly --declarationDir ./dist && bun build ./src/index.ts --outdir ./dist --target node --format esm",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "rhodium-core": "workspace:*"
   }
 }
