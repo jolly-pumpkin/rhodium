@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.base.json",
+  "include": [],
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/capabilities" },
+    { "path": "./packages/budget" },
+    { "path": "./packages/discovery" },
+    { "path": "./packages/graph" },
+    { "path": "./packages/context" },
+    { "path": "./packages/testing" }
+  ]
+}
