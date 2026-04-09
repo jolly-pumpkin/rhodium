@@ -1,1 +1,1 @@
-// rhodium-capabilities: exports added as implementation progresses
+export * from './types.js';
