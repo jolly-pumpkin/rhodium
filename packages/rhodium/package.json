@@ -1,0 +1,55 @@
+{
+  "name": "rhodium",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./core": {
+      "types": "../core/dist/index.d.ts",
+      "import": "../core/dist/index.js"
+    },
+    "./capabilities": {
+      "types": "../capabilities/dist/index.d.ts",
+      "import": "../capabilities/dist/index.js"
+    },
+    "./budget": {
+      "types": "../budget/dist/index.d.ts",
+      "import": "../budget/dist/index.js"
+    },
+    "./discovery": {
+      "types": "../discovery/dist/index.d.ts",
+      "import": "../discovery/dist/index.js"
+    },
+    "./graph": {
+      "types": "../graph/dist/index.d.ts",
+      "import": "../graph/dist/index.js"
+    },
+    "./context": {
+      "types": "../context/dist/index.d.ts",
+      "import": "../context/dist/index.js"
+    },
+    "./testing": {
+      "types": "../testing/dist/index.d.ts",
+      "import": "../testing/dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --emitDeclarationOnly --declarationDir ./dist && bun build ./src/index.ts --outdir ./dist --target node --format esm",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "rhodium-core": "workspace:*",
+    "rhodium-capabilities": "workspace:*",
+    "rhodium-budget": "workspace:*",
+    "rhodium-discovery": "workspace:*",
+    "rhodium-graph": "workspace:*",
+    "rhodium-context": "workspace:*",
+    "rhodium-testing": "workspace:*"
+  }
+}

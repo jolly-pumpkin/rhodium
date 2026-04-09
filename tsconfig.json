@@ -8,6 +8,7 @@
     { "path": "./packages/discovery" },
     { "path": "./packages/graph" },
     { "path": "./packages/context" },
-    { "path": "./packages/testing" }
+    { "path": "./packages/testing" },
+    { "path": "./packages/rhodium" }
   ]
 }
