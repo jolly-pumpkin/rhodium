@@ -7,12 +7,12 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     }
   },
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target node --format esm",
+    "build": "tsc --emitDeclarationOnly --declarationDir ./dist && bun build ./src/index.ts --outdir ./dist --target node --format esm",
     "typecheck": "tsc --noEmit"
   }
 }
