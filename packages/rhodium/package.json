@@ -11,36 +11,36 @@
       "import": "./dist/index.js"
     },
     "./core": {
-      "types": "../core/dist/index.d.ts",
-      "import": "../core/dist/index.js"
+      "types": "./dist/core.d.ts",
+      "import": "./dist/core.js"
     },
     "./capabilities": {
-      "types": "../capabilities/dist/index.d.ts",
-      "import": "../capabilities/dist/index.js"
+      "types": "./dist/capabilities.d.ts",
+      "import": "./dist/capabilities.js"
     },
     "./budget": {
-      "types": "../budget/dist/index.d.ts",
-      "import": "../budget/dist/index.js"
+      "types": "./dist/budget.d.ts",
+      "import": "./dist/budget.js"
     },
     "./discovery": {
-      "types": "../discovery/dist/index.d.ts",
-      "import": "../discovery/dist/index.js"
+      "types": "./dist/discovery.d.ts",
+      "import": "./dist/discovery.js"
     },
     "./graph": {
-      "types": "../graph/dist/index.d.ts",
-      "import": "../graph/dist/index.js"
+      "types": "./dist/graph.d.ts",
+      "import": "./dist/graph.js"
     },
     "./context": {
-      "types": "../context/dist/index.d.ts",
-      "import": "../context/dist/index.js"
+      "types": "./dist/context.d.ts",
+      "import": "./dist/context.js"
     },
     "./testing": {
-      "types": "../testing/dist/index.d.ts",
-      "import": "../testing/dist/index.js"
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js"
     }
   },
   "scripts": {
-    "build": "tsc --emitDeclarationOnly --declarationDir ./dist && bun build ./src/index.ts --outdir ./dist --target node --format esm",
+    "build": "tsc --emitDeclarationOnly && bun build ./src/index.ts ./src/core.ts ./src/capabilities.ts ./src/budget.ts ./src/discovery.ts ./src/graph.ts ./src/context.ts ./src/testing.ts --outdir ./dist --target node --format esm",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
