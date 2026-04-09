@@ -1,0 +1,81 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "rhodium-monorepo",
+      "devDependencies": {
+        "typescript": "^5.4.0",
+      },
+    },
+    "packages/budget": {
+      "name": "rhodium-budget",
+      "version": "0.1.0",
+      "dependencies": {
+        "rhodium-core": "workspace:*",
+      },
+    },
+    "packages/capabilities": {
+      "name": "rhodium-capabilities",
+      "version": "0.1.0",
+    },
+    "packages/context": {
+      "name": "rhodium-context",
+      "version": "0.1.0",
+      "dependencies": {
+        "rhodium-core": "workspace:*",
+      },
+    },
+    "packages/core": {
+      "name": "rhodium-core",
+      "version": "0.1.0",
+    },
+    "packages/discovery": {
+      "name": "rhodium-discovery",
+      "version": "0.1.0",
+    },
+    "packages/graph": {
+      "name": "rhodium-graph",
+      "version": "0.1.0",
+    },
+    "packages/rhodium": {
+      "name": "rhodium",
+      "version": "0.1.0",
+      "dependencies": {
+        "rhodium-budget": "workspace:*",
+        "rhodium-capabilities": "workspace:*",
+        "rhodium-context": "workspace:*",
+        "rhodium-core": "workspace:*",
+        "rhodium-discovery": "workspace:*",
+        "rhodium-graph": "workspace:*",
+        "rhodium-testing": "workspace:*",
+      },
+    },
+    "packages/testing": {
+      "name": "rhodium-testing",
+      "version": "0.1.0",
+      "dependencies": {
+        "rhodium-core": "workspace:*",
+      },
+    },
+  },
+  "packages": {
+    "rhodium": ["rhodium@workspace:packages/rhodium"],
+
+    "rhodium-budget": ["rhodium-budget@workspace:packages/budget"],
+
+    "rhodium-capabilities": ["rhodium-capabilities@workspace:packages/capabilities"],
+
+    "rhodium-context": ["rhodium-context@workspace:packages/context"],
+
+    "rhodium-core": ["rhodium-core@workspace:packages/core"],
+
+    "rhodium-discovery": ["rhodium-discovery@workspace:packages/discovery"],
+
+    "rhodium-graph": ["rhodium-graph@workspace:packages/graph"],
+
+    "rhodium-testing": ["rhodium-testing@workspace:packages/testing"],
+
+    "typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
+  }
+}
