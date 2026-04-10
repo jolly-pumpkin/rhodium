@@ -201,6 +201,26 @@ describe('PluginRegistry', () => {
 
       await expect(registry.unregister('my-plugin')).resolves.toBeUndefined();
     });
+
+    it('completes cleanup even if deactivate() throws', async () => {
+      const { emit, calls } = makeEmit();
+      const registry = new PluginRegistry(emit);
+      const deactivate = mock(async () => { throw new Error('deactivate failed'); });
+      const plugin: Plugin = { ...makePlugin('my-plugin', ['search']), deactivate };
+
+      registry.register(plugin);
+      registry.setState('my-plugin', 'active');
+
+      await registry.unregister('my-plugin');
+
+      // Cleanup completed despite deactivate() throwing
+      expect(registry.getPlugin('my-plugin')).toBeUndefined();
+      expect(registry.getState('my-plugin')).toBeUndefined();
+      // plugin:unregistered was still emitted
+      expect(calls.at(-1)).toMatchObject({ event: 'plugin:unregistered' });
+      // tool was freed
+      expect(() => registry.register(makePlugin('plugin-b', ['search']))).not.toThrow();
+    });
   });
 
   describe('setState()', () => {

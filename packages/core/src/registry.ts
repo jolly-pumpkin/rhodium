@@ -61,10 +61,13 @@ export class PluginRegistry {
 
     const state = this.#states.get(pluginKey);
     if (state === 'active' || state === 'resolving') {
-      await plugin.deactivate?.();
+      try {
+        await plugin.deactivate?.();
+      } catch {
+        // deactivate() errors do not prevent registry cleanup
+      }
     }
 
-    this.#states.set(pluginKey, 'unregistered');
     this.#plugins.delete(pluginKey);
     this.#states.delete(pluginKey);
     for (const tool of plugin.manifest.tools) {
