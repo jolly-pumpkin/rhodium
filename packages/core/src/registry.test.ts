@@ -80,8 +80,10 @@ describe('PluginRegistry', () => {
       const registry = new PluginRegistry(emit);
       registry.register(makePlugin('plugin-a', ['search']));
 
-      expect(() => registry.register(makePlugin('plugin-b', ['search'])))
-        .toThrow(/search/);
+      const tryRegister = () => registry.register(makePlugin('plugin-b', ['search']));
+      expect(tryRegister).toThrow(/search/);
+      expect(tryRegister).toThrow(/plugin-a/);
+      expect(tryRegister).toThrow(/plugin-b/);
     });
 
     it('does not partially register a plugin when a later tool conflicts', () => {
