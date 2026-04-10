@@ -163,7 +163,7 @@ Implement `resolver.ts`:
 
 ## 5. Capability System (`packages/capabilities`)
 
-### RHOD-008: `defineCapability()` and Validation
+### RHOD-008: `defineCapability()` and Validation **DONE**
 **Priority:** P1 | **Size:** M | **Deps:** RHOD-002, RHOD-003
 
 Implement `define.ts` and `validate.ts`:
@@ -177,11 +177,11 @@ Implement `define.ts` and `validate.ts`:
 - `CapabilityViolationError` with specific shape mismatches per ARD formatting
 
 **Acceptance:**
-- [ ] `defineCapability()` produces a typed token usable for resolution
-- [ ] Validation catches: missing methods, missing properties, wrong arity
-- [ ] Validation passes for conforming implementations
-- [ ] Error messages match ARD Section 12 format
-- [ ] No runtime type system dependency (shape-checking only)
+- [x] `defineCapability()` produces a typed token usable for resolution
+- [x] Validation catches: missing methods, missing properties, wrong arity
+- [x] Validation passes for conforming implementations
+- [x] Error messages match ARD Section 12 format
+- [x] No runtime type system dependency (shape-checking only)
 
 ---
 
