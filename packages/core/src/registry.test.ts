@@ -200,4 +200,49 @@ describe('PluginRegistry', () => {
       await expect(registry.unregister('my-plugin')).resolves.toBeUndefined();
     });
   });
+
+  describe('setState()', () => {
+    it('updates the state for a registered plugin', () => {
+      const { emit } = makeEmit();
+      const registry = new PluginRegistry(emit);
+      registry.register(makePlugin('my-plugin'));
+
+      registry.setState('my-plugin', 'active');
+
+      expect(registry.getState('my-plugin')).toBe('active');
+    });
+
+    it('is a no-op for unknown keys', () => {
+      const { emit } = makeEmit();
+      const registry = new PluginRegistry(emit);
+
+      expect(() => registry.setState('nonexistent', 'active')).not.toThrow();
+    });
+  });
+
+  describe('getPluginStates()', () => {
+    it('returns a map of all plugin states', () => {
+      const { emit } = makeEmit();
+      const registry = new PluginRegistry(emit);
+      registry.register(makePlugin('plugin-a'));
+      registry.register(makePlugin('plugin-b'));
+
+      const states = registry.getPluginStates();
+
+      expect(states.size).toBe(2);
+      expect(states.get('plugin-a')).toBe('registered');
+      expect(states.get('plugin-b')).toBe('registered');
+    });
+
+    it('returns a copy — mutations do not affect the registry', () => {
+      const { emit } = makeEmit();
+      const registry = new PluginRegistry(emit);
+      registry.register(makePlugin('my-plugin'));
+
+      const states = registry.getPluginStates();
+      states.set('my-plugin', 'failed');
+
+      expect(registry.getState('my-plugin')).toBe('registered');
+    });
+  });
 });
