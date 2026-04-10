@@ -16,10 +16,10 @@
 Set up the monorepo workspace structure with Bun workspaces. Create `packages/core`, `packages/capabilities`, `packages/budget`, `packages/discovery`, `packages/graph`, `packages/context`, `packages/testing` with their `package.json` files. Configure TypeScript 5.0+ with shared `tsconfig.json`. ESM primary output. Add root `package.json` with workspace config.
 
 **Acceptance:**
-- [ ] `bun install` succeeds from root
-- [ ] Each sub-package compiles independently
-- [ ] Imports like `rhodium/core`, `rhodium/capabilities` resolve correctly
-- [ ] ES2022 target, strict TypeScript
+- [x] `bun install` succeeds from root
+- [x] Each sub-package compiles independently
+- [x] Imports like `rhodium/core`, `rhodium/capabilities` resolve correctly
+- [x] ES2022 target, strict TypeScript
 
 ### RHOD-002: Shared Type Definitions **DONE** 
 **Priority:** P0 | **Size:** M | **Deps:** RHOD-001
@@ -38,9 +38,9 @@ Define all shared TypeScript interfaces and types from the ARD in a `packages/co
 - `CapabilityContract`, `CapabilityViolation`, `CapabilityValidator`
 
 **Acceptance:**
-- [ ] All interfaces from ARD sections 4-13 are defined
-- [ ] Types compile cleanly with no `any` escape hatches
-- [ ] Re-exported from each package's `index.ts`
+- [x] All interfaces from ARD sections 4-13 are defined
+- [x] Types compile cleanly with no `any` escape hatches
+- [x] Re-exported from each package's `index.ts`
 
 ---
 
@@ -84,16 +84,16 @@ Implement a typed event bus supporting all `BrokerEvent` types. Must support:
 - No external dependencies
 
 **Acceptance:**
-- [ ] All 15 `BrokerEvent` types from ARD Section 4.1 are supported
-- [ ] Unsubscribe function works correctly
-- [ ] Custom string events supported for plugin-to-plugin communication
-- [ ] Unit tests for subscribe, emit, unsubscribe
+- [x] All 15 `BrokerEvent` types from ARD Section 4.1 are supported
+- [x] Unsubscribe function works correctly
+- [x] Custom string events supported for plugin-to-plugin communication
+- [x] Unit tests for subscribe, emit, unsubscribe
 
 ---
 
 ## 3. Plugin Registry (`packages/core`)
 
-### RHOD-005: Plugin Registry
+### RHOD-005: Plugin Registry **DONE**
 **Priority:** P0 | **Size:** M | **Deps:** RHOD-003, RHOD-004
 
 Implement `registry.ts`:
