@@ -244,22 +244,22 @@ Implement the `PluginContext` interface:
 
 ## 7. Token Budget (`packages/budget`)
 
-### RHOD-011: Token Counter
+### RHOD-011: Token Counter **DONE**
 **Priority:** P1 | **Size:** S | **Deps:** RHOD-002
 
 Implement `counter.ts`:
 
-- `chars3` strategy: `Math.ceil(text.length / 3)` (default)
-- `chars4` strategy: `Math.ceil(text.length / 4)`
+- `chars3` strategy: `Math.ceil(text.length / 3)`
+- `chars4` strategy: `Math.ceil(text.length / 4)` (default, industry standard per ADR-004)
 - `tiktoken` strategy: optional peer dep integration
 - Custom function strategy: `(text: string) => number`
 - Factory: `createTokenCounter(config) => (text: string) => number`
 
 **Acceptance:**
-- [ ] Default is `chars3`
-- [ ] All 4 strategies work
-- [ ] Custom function passthrough works
-- [ ] Zero dependencies for chars strategies
+- [x] Default is `chars4` (industry standard, ADR-004 compliant)
+- [x] All 4 strategies work
+- [x] Custom function passthrough works
+- [x] Zero dependencies for chars strategies
 
 ### RHOD-012: Budget Allocator
 **Priority:** P1 | **Size:** L | **Deps:** RHOD-011
@@ -296,7 +296,7 @@ Implement `allocator.ts`:
 
 ## 8. Tool Discovery (`packages/discovery`)
 
-### RHOD-013: Search Index Builder
+### RHOD-013: Search Index Builder **DONE**
 **Priority:** P1 | **Size:** M | **Deps:** RHOD-002
 
 Implement `index-builder.ts`:
@@ -307,10 +307,10 @@ Implement `index-builder.ts`:
 - No plugin code execution
 
 **Acceptance:**
-- [ ] Index built from manifests only
-- [ ] Incremental add/remove works
-- [ ] Weighted fields stored correctly
-- [ ] Zero external dependencies
+- [x] Index built from manifests only
+- [x] Incremental add/remove works
+- [x] Weighted fields stored correctly
+- [x] Zero external dependencies
 
 ### RHOD-014: Tool Search & Ranking
 **Priority:** P1 | **Size:** M | **Deps:** RHOD-013
