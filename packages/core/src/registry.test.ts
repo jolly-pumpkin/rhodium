@@ -269,4 +269,5 @@ describe('PluginRegistry', () => {
       expect(registry.getAllPlugins()).toEqual([]);
     });
   });
+
 });
