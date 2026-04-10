@@ -65,5 +65,46 @@ describe('PluginRegistry', () => {
       expect(() => registry.register(makePlugin('my-plugin')))
         .toThrow(/my-plugin/);
     });
+
+    it('throws DuplicateToolError when tool name conflicts with another plugin', () => {
+      const { emit } = makeEmit();
+      const registry = new PluginRegistry(emit);
+      registry.register(makePlugin('plugin-a', ['search']));
+
+      expect(() => registry.register(makePlugin('plugin-b', ['search'])))
+        .toThrow(DuplicateToolError);
+    });
+
+    it('error message includes both plugin keys and tool name', () => {
+      const { emit } = makeEmit();
+      const registry = new PluginRegistry(emit);
+      registry.register(makePlugin('plugin-a', ['search']));
+
+      expect(() => registry.register(makePlugin('plugin-b', ['search'])))
+        .toThrow(/search/);
+    });
+
+    it('does not partially register a plugin when a later tool conflicts', () => {
+      const { emit } = makeEmit();
+      const registry = new PluginRegistry(emit);
+      registry.register(makePlugin('plugin-a', ['search']));
+
+      const pluginB: Plugin = {
+        key: 'plugin-b',
+        version: '1.0.0',
+        manifest: {
+          provides: [],
+          needs: [],
+          tools: [
+            { name: 'fetch', description: 'fetch tool' },
+            { name: 'search', description: 'search tool' },
+          ],
+        },
+      };
+
+      expect(() => registry.register(pluginB)).toThrow(DuplicateToolError);
+      expect(registry.getPlugin('plugin-b')).toBeUndefined();
+      expect(registry.getPluginStates().get('plugin-b')).toBeUndefined();
+    });
   });
 });
