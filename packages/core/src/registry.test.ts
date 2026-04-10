@@ -107,4 +107,47 @@ describe('PluginRegistry', () => {
       expect(registry.getPluginStates().get('plugin-b')).toBeUndefined();
     });
   });
+
+  describe('unregister()', () => {
+    it('removes the plugin and its tools from the registry', async () => {
+      const { emit } = makeEmit();
+      const registry = new PluginRegistry(emit);
+      registry.register(makePlugin('my-plugin', ['search']));
+
+      await registry.unregister('my-plugin');
+
+      expect(registry.getPlugin('my-plugin')).toBeUndefined();
+      expect(registry.getState('my-plugin')).toBeUndefined();
+    });
+
+    it('emits plugin:unregistered', async () => {
+      const { emit, calls } = makeEmit();
+      const registry = new PluginRegistry(emit);
+      registry.register(makePlugin('my-plugin'));
+
+      await registry.unregister('my-plugin');
+
+      expect(calls.at(-1)).toEqual({
+        event: 'plugin:unregistered',
+        payload: { pluginKey: 'my-plugin' },
+      });
+    });
+
+    it('frees tool names for re-registration after unregister', async () => {
+      const { emit } = makeEmit();
+      const registry = new PluginRegistry(emit);
+      registry.register(makePlugin('plugin-a', ['search']));
+      await registry.unregister('plugin-a');
+
+      expect(() => registry.register(makePlugin('plugin-b', ['search']))).not.toThrow();
+    });
+
+    it('is idempotent — no-op for unknown key', async () => {
+      const { emit, calls } = makeEmit();
+      const registry = new PluginRegistry(emit);
+
+      await expect(registry.unregister('nonexistent')).resolves.toBeUndefined();
+      expect(calls).toHaveLength(0);
+    });
+  });
 });
