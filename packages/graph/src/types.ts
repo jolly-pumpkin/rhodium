@@ -24,7 +24,7 @@ export interface ProviderEntry {
   pluginKey: string;
   capability: string;
   priority: number;       // defaults to 0 if not set in CapabilityDeclaration
-  variant?: string;
+  variant: string | undefined;
   registrationIndex: number; // monotonically increasing; higher = more recently registered
 }
 
