@@ -245,4 +245,28 @@ describe('PluginRegistry', () => {
       expect(registry.getState('my-plugin')).toBe('registered');
     });
   });
+
+  describe('getAllPlugins()', () => {
+    it('returns all registered plugins', () => {
+      const { emit } = makeEmit();
+      const registry = new PluginRegistry(emit);
+      const a = makePlugin('plugin-a');
+      const b = makePlugin('plugin-b');
+      registry.register(a);
+      registry.register(b);
+
+      const plugins = registry.getAllPlugins();
+
+      expect(plugins).toHaveLength(2);
+      expect(plugins).toContain(a);
+      expect(plugins).toContain(b);
+    });
+
+    it('returns empty array when no plugins registered', () => {
+      const { emit } = makeEmit();
+      const registry = new PluginRegistry(emit);
+
+      expect(registry.getAllPlugins()).toEqual([]);
+    });
+  });
 });
