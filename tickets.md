@@ -138,7 +138,7 @@ Implement `dag.ts` and `cycle-detect.ts`:
 - [x] `getDependents()` returns transitive dependents
 - [x] Unit tests for: linear chains, diamond dependencies, independent groups, cycles
 
-### RHOD-007: Dependency Resolver
+### RHOD-007: Dependency Resolver **DONE**
 **Priority:** P0 | **Size:** M | **Deps:** RHOD-006
 
 Implement `resolver.ts`:
@@ -153,11 +153,11 @@ Implement `resolver.ts`:
 - Order-independent plugin registration (late arrival support)
 
 **Acceptance:**
-- [ ] All 6 resolution rules pass
-- [ ] Priority + recency tiebreaking works
-- [ ] Variant filtering works
-- [ ] Late arrival scenario works
-- [ ] Error messages include available capabilities list
+- [x] All 6 resolution rules pass
+- [x] Priority + recency tiebreaking works
+- [x] Variant filtering works
+- [x] Late arrival scenario works
+- [x] Error messages include available capabilities list
 
 ---
 
