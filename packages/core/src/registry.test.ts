@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, mock } from 'bun:test';
 import { PluginRegistry } from './registry.js';
 import type { Plugin, BrokerEvent, BrokerEventPayload } from './types.js';
 import { DuplicatePluginError, DuplicateToolError } from './errors.js';
@@ -148,6 +148,56 @@ describe('PluginRegistry', () => {
 
       await expect(registry.unregister('nonexistent')).resolves.toBeUndefined();
       expect(calls).toHaveLength(0);
+    });
+
+    it('calls deactivate() when plugin state is active', async () => {
+      const { emit } = makeEmit();
+      const registry = new PluginRegistry(emit);
+      const deactivate = mock(async () => {});
+      const plugin: Plugin = { ...makePlugin('my-plugin'), deactivate };
+
+      registry.register(plugin);
+      registry.setState('my-plugin', 'active');
+
+      await registry.unregister('my-plugin');
+
+      expect(deactivate).toHaveBeenCalledTimes(1);
+    });
+
+    it('calls deactivate() when plugin state is resolving', async () => {
+      const { emit } = makeEmit();
+      const registry = new PluginRegistry(emit);
+      const deactivate = mock(async () => {});
+      const plugin: Plugin = { ...makePlugin('my-plugin'), deactivate };
+
+      registry.register(plugin);
+      registry.setState('my-plugin', 'resolving');
+
+      await registry.unregister('my-plugin');
+
+      expect(deactivate).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not call deactivate() when plugin state is registered', async () => {
+      const { emit } = makeEmit();
+      const registry = new PluginRegistry(emit);
+      const deactivate = mock(async () => {});
+      const plugin: Plugin = { ...makePlugin('my-plugin'), deactivate };
+
+      registry.register(plugin);
+
+      await registry.unregister('my-plugin');
+
+      expect(deactivate).not.toHaveBeenCalled();
+    });
+
+    it('does not throw when plugin has no deactivate hook', async () => {
+      const { emit } = makeEmit();
+      const registry = new PluginRegistry(emit);
+      registry.register(makePlugin('my-plugin'));
+      registry.setState('my-plugin', 'active');
+
+      await expect(registry.unregister('my-plugin')).resolves.toBeUndefined();
     });
   });
 });
