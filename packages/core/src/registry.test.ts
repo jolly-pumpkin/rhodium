@@ -47,5 +47,23 @@ describe('PluginRegistry', () => {
       expect(calls).toHaveLength(1);
       expect(calls[0]).toEqual({ event: 'plugin:registered', payload: { pluginKey: 'my-plugin' } });
     });
+
+    it('throws DuplicatePluginError when key already registered', () => {
+      const { emit } = makeEmit();
+      const registry = new PluginRegistry(emit);
+      registry.register(makePlugin('my-plugin'));
+
+      expect(() => registry.register(makePlugin('my-plugin')))
+        .toThrow(DuplicatePluginError);
+    });
+
+    it('includes the plugin key in the error message', () => {
+      const { emit } = makeEmit();
+      const registry = new PluginRegistry(emit);
+      registry.register(makePlugin('my-plugin'));
+
+      expect(() => registry.register(makePlugin('my-plugin')))
+        .toThrow(/my-plugin/);
+    });
   });
 });
