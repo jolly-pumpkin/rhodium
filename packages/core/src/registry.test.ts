@@ -45,7 +45,7 @@ describe('PluginRegistry', () => {
       registry.register(makePlugin('my-plugin'));
 
       expect(calls).toHaveLength(1);
-      expect(calls[0]).toEqual({ event: 'plugin:registered', payload: { pluginKey: 'my-plugin' } });
+      expect(calls.at(0)).toEqual({ event: 'plugin:registered', payload: { pluginKey: 'my-plugin' } });
     });
 
     it('throws DuplicatePluginError when key already registered', () => {
@@ -107,6 +107,8 @@ describe('PluginRegistry', () => {
       expect(() => registry.register(pluginB)).toThrow(DuplicateToolError);
       expect(registry.getPlugin('plugin-b')).toBeUndefined();
       expect(registry.getPluginStates().get('plugin-b')).toBeUndefined();
+      // 'fetch' (non-conflicting tool) must also not be in the index
+      expect(() => registry.register(makePlugin('plugin-c', ['fetch']))).not.toThrow();
     });
   });
 
@@ -187,6 +189,34 @@ describe('PluginRegistry', () => {
       const plugin: Plugin = { ...makePlugin('my-plugin'), deactivate };
 
       registry.register(plugin);
+
+      await registry.unregister('my-plugin');
+
+      expect(deactivate).not.toHaveBeenCalled();
+    });
+
+    it('does not call deactivate() when plugin state is inactive', async () => {
+      const { emit } = makeEmit();
+      const registry = new PluginRegistry(emit);
+      const deactivate = mock(async () => {});
+      const plugin: Plugin = { ...makePlugin('my-plugin'), deactivate };
+
+      registry.register(plugin);
+      registry.setState('my-plugin', 'inactive');
+
+      await registry.unregister('my-plugin');
+
+      expect(deactivate).not.toHaveBeenCalled();
+    });
+
+    it('does not call deactivate() when plugin state is failed', async () => {
+      const { emit } = makeEmit();
+      const registry = new PluginRegistry(emit);
+      const deactivate = mock(async () => {});
+      const plugin: Plugin = { ...makePlugin('my-plugin'), deactivate };
+
+      registry.register(plugin);
+      registry.setState('my-plugin', 'failed');
 
       await registry.unregister('my-plugin');
 
