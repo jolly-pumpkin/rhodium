@@ -13,6 +13,8 @@ export type TokenCounterStrategy =
   | 'tiktoken'
   | ((text: string) => number);
 
+export type TokenCounter = (text: string) => number;
+
 export interface AllocationResult {
   allocated: Array<{
     pluginKey: string;
