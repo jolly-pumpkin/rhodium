@@ -19,6 +19,9 @@ export function createDependencyGraph(): DependencyGraph {
   /**
    * Build adjacency list from current state.
    * Edge A→B means "A depends on B".
+   *
+   * INVARIANT: Every plugin must be in pluginProvides (enforced by addPlugin atomicity).
+   * This ensures all registered plugins appear as nodes in the adjacency list.
    */
   function buildAdjacency(): Map<string, Set<string>> {
     const adjacency = new Map<string, Set<string>>();
