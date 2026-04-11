@@ -162,10 +162,44 @@ function allocateProportional(
 }
 
 function allocateEqual(
-  _contributions: ContextContribution[],
-  _availableTokens: number,
-  _counter: TokenCounter,
-  _emit: EmitFn
+  contributions: ContextContribution[],
+  availableTokens: number,
+  counter: TokenCounter,
+  emit: EmitFn
 ): AllocationResult {
-  return { allocated: [], dropped: [], totalAllocated: 0 };
+  if (contributions.length === 0) {
+    return { allocated: [], dropped: [], totalAllocated: 0 };
+  }
+
+  const share = Math.floor(availableTokens / contributions.length);
+  const allocated: AllocationResult['allocated'] = [];
+  const dropped: DroppedContribution[] = [];
+
+  for (const c of contributions) {
+    const estimated = estimateTokens(c, counter);
+    const severity = computeSeverity(c.priority);
+
+    // atomic before minTokens
+    if (c.atomic && estimated > share) {
+      dropped.push({ pluginKey: c.pluginKey, priority: c.priority, reason: 'atomic', estimatedTokens: estimated, severity });
+      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated, reason: 'atomic' });
+      continue;
+    }
+
+    if (c.minTokens !== undefined && share < c.minTokens) {
+      dropped.push({ pluginKey: c.pluginKey, priority: c.priority, reason: 'minTokens', estimatedTokens: estimated, severity });
+      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated, reason: 'minTokens' });
+      continue;
+    }
+
+    const actualTokens = Math.min(estimated, share);
+    const truncated = actualTokens < estimated;
+    allocated.push({ pluginKey: c.pluginKey, tokens: actualTokens, truncated });
+    if (truncated) {
+      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated - actualTokens, reason: 'overflow' });
+    }
+  }
+
+  const totalAllocated = allocated.reduce((sum, a) => sum + a.tokens, 0);
+  return { allocated, dropped, totalAllocated };
 }

@@ -357,3 +357,69 @@ describe('proportional strategy', () => {
     expect(zero?.truncated).toBe(true);
   });
 });
+
+describe('equal strategy', () => {
+  const counter = createTokenCounter('chars4');
+
+  it('gives each contribution the same budget share regardless of priority', () => {
+    const result = allocateBudget(
+      [
+        { pluginKey: 'a', priority: 90, systemPromptFragment: 'x'.repeat(400) },
+        { pluginKey: 'b', priority: 10, systemPromptFragment: 'x'.repeat(400) },
+      ],
+      { maxTokens: 100, allocationStrategy: 'equal' },
+      { tokenCounter: counter }
+    );
+    const a = result.allocated.find(x => x.pluginKey === 'a');
+    const b = result.allocated.find(x => x.pluginKey === 'b');
+    expect(a?.tokens).toBe(50);
+    expect(b?.tokens).toBe(50);
+  });
+
+  it('drops atomic contribution when share is insufficient', () => {
+    const result = allocateBudget(
+      [
+        { pluginKey: 'a', priority: 50, systemPromptFragment: 'x'.repeat(400), atomic: true },
+        { pluginKey: 'b', priority: 50, systemPromptFragment: 'hi' },
+      ],
+      { maxTokens: 100, allocationStrategy: 'equal' },
+      { tokenCounter: counter }
+    );
+    expect(result.dropped.find(d => d.pluginKey === 'a')?.reason).toBe('atomic');
+  });
+
+  it('drops contribution when share < minTokens', () => {
+    const result = allocateBudget(
+      [
+        { pluginKey: 'a', priority: 50, systemPromptFragment: 'hi', minTokens: 60 },
+        { pluginKey: 'b', priority: 50, systemPromptFragment: 'hi' },
+      ],
+      { maxTokens: 100, allocationStrategy: 'equal' },
+      { tokenCounter: counter }
+    );
+    expect(result.dropped.find(d => d.pluginKey === 'a')?.reason).toBe('minTokens');
+  });
+
+  it('totalAllocated equals sum of allocated tokens', () => {
+    const result = allocateBudget(
+      [
+        { pluginKey: 'a', priority: 90, systemPromptFragment: 'x'.repeat(400) },
+        { pluginKey: 'b', priority: 10, systemPromptFragment: 'x'.repeat(400) },
+      ],
+      { maxTokens: 100, allocationStrategy: 'equal' },
+      { tokenCounter: counter }
+    );
+    const sum = result.allocated.reduce((s, a) => s + a.tokens, 0);
+    expect(result.totalAllocated).toBe(sum);
+  });
+
+  it('handles empty contributions array', () => {
+    const result = allocateBudget(
+      [],
+      { maxTokens: 100, allocationStrategy: 'equal' }
+    );
+    expect(result.allocated).toHaveLength(0);
+    expect(result.dropped).toHaveLength(0);
+    expect(result.totalAllocated).toBe(0);
+  });
+});
