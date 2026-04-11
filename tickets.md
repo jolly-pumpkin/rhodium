@@ -363,7 +363,7 @@ Implement `pipeline.ts` — the 6-stage assembly pipeline:
 - [x] Performance: < 5ms for 20 plugins
 - [x] `context:assembled` event emitted
 
-### RHOD-016: Middleware System
+### RHOD-016: Middleware System **DONE**
 **Priority:** P2 | **Size:** M | **Deps:** RHOD-015
 
 Implement `middleware.ts`:
@@ -376,11 +376,11 @@ Implement `middleware.ts`:
 - `postAssembly` can deduplicate, merge, or transform assembled context
 
 **Acceptance:**
-- [ ] Middleware hooks execute in priority order
-- [ ] `preToolCall` can modify, skip, or inject calls
-- [ ] `postToolCall` transforms results
-- [ ] `postAssembly` transforms assembled context
-- [ ] Middleware is registered via standard plugin mechanism
+- [x] Middleware hooks execute in priority order
+- [x] `preToolCall` can modify, skip, or inject calls
+- [x] `postToolCall` transforms results
+- [x] `postAssembly` transforms assembled context
+- [x] Middleware is registered via standard plugin mechanism
 
 ---
 

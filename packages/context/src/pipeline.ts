@@ -32,9 +32,11 @@ export interface PipelineOptions {
   /** Optional tool search index (from rhodium-discovery). Required for Stage 4 Discover. */
   searchIndex?: SearchIndex;
   /**
-   * Returns middleware plugins in priority order.
-   * Sorting by priority is the caller's responsibility — MiddlewarePlugin has no priority field.
-   * The broker should sort by the plugin's CapabilityDeclaration.priority before passing.
+   * Returns middleware plugins in priority-sorted order (high → low).
+   * Sorting is the caller's responsibility — use `collectMiddleware()` from
+   * middleware.ts, which sorts by the plugin's CapabilityDeclaration.priority.
+   * The pipeline iterates in reverse for the post-assembly onion, so
+   * low-priority middleware runs first and high-priority wraps last.
    */
   getMiddlewares: () => MiddlewarePlugin[];
   /**
@@ -226,9 +228,13 @@ export function createPipeline(opts: PipelineOptions): {
       },
     };
 
+    // postAssembly is a post-hook: iterate in reverse so the highest-priority
+    // middleware wraps last (onion model). getMiddlewares() returns middleware
+    // in priority-sorted order (high → low); reversing gives low → high.
     let ctx = preMiddlewareContext;
-    for (const mw of opts.getMiddlewares()) {
-      ctx = mw.postAssembly?.(ctx) ?? ctx;
+    const mws = opts.getMiddlewares();
+    for (let i = mws.length - 1; i >= 0; i--) {
+      ctx = mws[i]!.postAssembly?.(ctx) ?? ctx;
     }
 
     // ── STAGE 6: Serialize ──────────────────────────────────────────────────
