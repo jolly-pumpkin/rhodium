@@ -146,3 +146,55 @@ describe('priority strategy — basic allocation', () => {
     expect((emitted[0]?.payload as Record<string, unknown>).pluginKey).toBe('low');
   });
 });
+
+describe('priority strategy — constraints', () => {
+  const counter = createTokenCounter('chars4');
+
+  it('drops atomic contribution when it will not fit', () => {
+    const result = allocateBudget(
+      [{ pluginKey: 'a', priority: 60, systemPromptFragment: 'x'.repeat(40), atomic: true }],
+      { maxTokens: 5, allocationStrategy: 'priority' },
+      { tokenCounter: counter }
+    );
+    expect(result.allocated).toHaveLength(0);
+    expect(result.dropped[0]?.reason).toBe('atomic');
+  });
+
+  it('never marks atomic contribution as truncated (allocates fully if budget allows)', () => {
+    const result = allocateBudget(
+      [{ pluginKey: 'a', priority: 60, systemPromptFragment: 'hi', atomic: true }],
+      { maxTokens: 100, allocationStrategy: 'priority' },
+      { tokenCounter: counter }
+    );
+    expect(result.allocated[0]?.truncated).toBe(false);
+  });
+
+  it('drops contribution when remaining < minTokens', () => {
+    const result = allocateBudget(
+      [{ pluginKey: 'a', priority: 60, systemPromptFragment: 'hi', minTokens: 50 }],
+      { maxTokens: 5, allocationStrategy: 'priority' },
+      { tokenCounter: counter }
+    );
+    expect(result.dropped[0]?.reason).toBe('minTokens');
+  });
+
+  it('allocates contribution when remaining >= minTokens', () => {
+    const result = allocateBudget(
+      [{ pluginKey: 'a', priority: 60, systemPromptFragment: 'hi', minTokens: 1 }],
+      { maxTokens: 100, allocationStrategy: 'priority' },
+      { tokenCounter: counter }
+    );
+    expect(result.allocated).toHaveLength(1);
+  });
+
+  it('uses atomic as drop reason when both atomic and minTokens would fire', () => {
+    // estimated=10, remaining=5, minTokens=8 — both atomic and minTokens would reject
+    // atomic must win as the drop reason
+    const result = allocateBudget(
+      [{ pluginKey: 'a', priority: 60, systemPromptFragment: 'x'.repeat(40), atomic: true, minTokens: 8 }],
+      { maxTokens: 5, allocationStrategy: 'priority' },
+      { tokenCounter: counter }
+    );
+    expect(result.dropped[0]?.reason).toBe('atomic');
+  });
+});
