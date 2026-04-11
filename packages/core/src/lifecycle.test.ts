@@ -4,7 +4,8 @@ import { PluginRegistry } from './registry.js';
 import { createDependencyGraph } from '../../../packages/graph/src/dag.js';
 import { createCapabilityResolver } from '../../../packages/graph/src/resolver.js';
 import { createEventBus } from './events.js';
-import { ActivationTimeoutError, ActivationError } from './errors.js';
+import { ActivationTimeoutError, ActivationError, CapabilityViolationError } from './errors.js';
+import { defineCapability } from '../../../packages/capabilities/src/define.js';
 import type { Plugin, PluginManifest } from './types.js';
 import type { LifecycleManagerOpts } from './lifecycle.js';
 
@@ -385,7 +386,6 @@ describe('lifecycle: deactivate()', () => {
     });
     const b = makePlugin('b', {
       manifest: { needs: [{ capability: 'cap-a' }] },
-      activate: (ctx) => ctx.provide('cap-a', {}),
       deactivate: () => order.push('deactivate-b'),
     });
 
@@ -511,6 +511,138 @@ describe('lifecycle: activatePlugin() hot path', () => {
 
     expect(registry.getState('consumer')).toBe('inactive');
     expect(registry.getState('provider')).toBe('inactive');
+  });
+});
+
+describe('lifecycle: PluginContext.provide() manifest enforcement', () => {
+  it('provide() with capability not in manifest.provides → plugin fails with UndeclaredCapabilityError', async () => {
+    const { manager, graph, registry } = makeLifecycleManager();
+
+    const plugin = makePlugin('bad-provider', {
+      manifest: { provides: [] },
+      activate: (ctx) => {
+        ctx.provide('undeclared-cap', { value: 42 });
+      },
+    });
+
+    registry.register(plugin);
+    graph.addPlugin('bad-provider', [], []);
+
+    const result = await manager.activate();
+
+    expect(result.failed.length).toBe(1);
+    expect(result.failed[0].pluginKey).toBe('bad-provider');
+    expect(result.failed[0].error.message).toContain('undeclared-cap');
+  });
+
+  it('provide() with contract in manifest and invalid implementation → fails with CapabilityViolationError', async () => {
+    const { manager, graph, registry } = makeLifecycleManager();
+
+    const contract = defineCapability<{ greet: (name: string) => string }>('greeter', {
+      methods: { greet: 1 },
+    });
+
+    const plugin = makePlugin('bad-impl', {
+      manifest: {
+        provides: [{ capability: 'greeter', contract }],
+      },
+      activate: (ctx) => {
+        ctx.provide('greeter', { notGreet: 42 });
+      },
+    });
+
+    registry.register(plugin);
+    graph.addPlugin('bad-impl', ['greeter'], []);
+
+    const result = await manager.activate();
+    expect(result.failed.length).toBe(1);
+    expect(result.failed[0].pluginKey).toBe('bad-impl');
+    expect(result.failed[0].error.message).toContain('greeter');
+  });
+
+  it('provide() with no contract in manifest declaration → passes without validation', async () => {
+    const { manager, graph, registry } = makeLifecycleManager();
+
+    const plugin = makePlugin('no-contract', {
+      manifest: {
+        provides: [{ capability: 'svc' }],
+      },
+      activate: (ctx) => {
+        ctx.provide('svc', 'anything at all');
+      },
+    });
+
+    registry.register(plugin);
+    graph.addPlugin('no-contract', ['svc'], []);
+
+    const result = await manager.activate();
+    expect(result.activated).toContain('no-contract');
+    expect(result.failed.length).toBe(0);
+  });
+
+  it('provide() with contract and valid implementation → activates successfully', async () => {
+    const { manager, graph, registry } = makeLifecycleManager();
+
+    const contract = defineCapability<{ greet: (name: string) => string }>('greeter', {
+      methods: { greet: 1 },
+    });
+
+    const plugin = makePlugin('good-impl', {
+      manifest: {
+        provides: [{ capability: 'greeter', contract }],
+      },
+      activate: (ctx) => {
+        ctx.provide('greeter', { greet: (name: string) => `Hello, ${name}` });
+      },
+    });
+
+    registry.register(plugin);
+    graph.addPlugin('good-impl', ['greeter'], []);
+
+    const result = await manager.activate();
+    expect(result.activated).toContain('good-impl');
+    expect(result.failed.length).toBe(0);
+  });
+});
+
+describe('lifecycle: PluginContext.registerToolHandler() manifest enforcement', () => {
+  it('registerToolHandler() with tool not in manifest.tools → plugin fails', async () => {
+    const { manager, graph, registry } = makeLifecycleManager();
+
+    const plugin = makePlugin('bad-tool-plugin', {
+      manifest: { tools: [] },
+      activate: (ctx) => {
+        ctx.registerToolHandler('undeclared-tool', async () => ({ content: 'ok' }));
+      },
+    });
+
+    registry.register(plugin);
+    graph.addPlugin('bad-tool-plugin', [], []);
+
+    const result = await manager.activate();
+    expect(result.failed.length).toBe(1);
+    expect(result.failed[0].pluginKey).toBe('bad-tool-plugin');
+    expect(result.failed[0].error.message).toContain('undeclared-tool');
+  });
+
+  it('registerToolHandler() with tool declared in manifest.tools → activates successfully', async () => {
+    const { manager, graph, registry } = makeLifecycleManager();
+
+    const plugin = makePlugin('good-tool-plugin', {
+      manifest: {
+        tools: [{ name: 'my-tool', description: 'A test tool' }],
+      },
+      activate: (ctx) => {
+        ctx.registerToolHandler('my-tool', async () => ({ content: 'ok' }));
+      },
+    });
+
+    registry.register(plugin);
+    graph.addPlugin('good-tool-plugin', [], []);
+
+    const result = await manager.activate();
+    expect(result.activated).toContain('good-tool-plugin');
+    expect(result.failed.length).toBe(0);
   });
 });
 

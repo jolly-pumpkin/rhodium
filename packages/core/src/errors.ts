@@ -176,6 +176,34 @@ export class CapabilityViolationError extends RhodiumError {
 }
 
 // ============================================================
+// Manifest enforcement errors
+// ============================================================
+
+export class UndeclaredCapabilityError extends RhodiumError {
+  static readonly CODE = 'UNDECLARED_CAPABILITY';
+
+  constructor(pluginKey: string, capability: string) {
+    super(
+      `Plugin '${pluginKey}' called provide('${capability}') but '${capability}' is not declared in manifest.provides`,
+      UndeclaredCapabilityError.CODE,
+      pluginKey
+    );
+  }
+}
+
+export class UndeclaredToolError extends RhodiumError {
+  static readonly CODE = 'UNDECLARED_TOOL';
+
+  constructor(pluginKey: string, toolName: string) {
+    super(
+      `Plugin '${pluginKey}' called registerToolHandler('${toolName}') but '${toolName}' is not declared in manifest.tools`,
+      UndeclaredToolError.CODE,
+      pluginKey
+    );
+  }
+}
+
+// ============================================================
 // Registration errors
 // ============================================================
 

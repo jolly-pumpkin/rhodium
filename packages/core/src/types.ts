@@ -1,3 +1,5 @@
+import type { CapabilityContract } from '../../../packages/capabilities/src/define.js';
+
 // ============================================================
 // Token budget configuration
 // ============================================================
@@ -104,6 +106,8 @@ export interface CapabilityDeclaration {
   priority?: number;
   /** Optional variant label for filtered resolution */
   variant?: string;
+  /** Optional contract schema for runtime validation of implementations */
+  contract?: CapabilityContract<unknown>;
 }
 
 export interface DependencyDeclaration {

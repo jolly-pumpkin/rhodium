@@ -1,4 +1,12 @@
-import { ActivationError, ActivationTimeoutError, CapabilityNotFoundError } from './errors.js';
+import {
+  ActivationError,
+  ActivationTimeoutError,
+  CapabilityNotFoundError,
+  CapabilityViolationError,
+  UndeclaredCapabilityError,
+  UndeclaredToolError,
+} from './errors.js';
+import { createCapabilityValidator } from '../../../packages/capabilities/src/validate.js';
 import type {
   ActivationResult,
   CapabilityDeclaration,
@@ -71,8 +79,22 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       provide<T>(capability: string, implementation: T): void {
         // Find priority and variant from manifest.provides
         const decl = plugin.manifest.provides.find((p) => p.capability === capability);
-        const priority = decl?.priority ?? 0;
-        const variant = decl?.variant ?? undefined;
+
+        // Criterion 2: throw if not declared in manifest
+        if (!decl) {
+          throw new UndeclaredCapabilityError(pluginKey, capability);
+        }
+
+        // Criterion 3: validate against contract schema if declared
+        if (decl.contract) {
+          const violations = createCapabilityValidator().validate(decl.contract, implementation);
+          if (violations.length > 0) {
+            throw new CapabilityViolationError(pluginKey, capability, violations);
+          }
+        }
+
+        const priority = decl.priority ?? 0;
+        const variant = decl.variant ?? undefined;
 
         const providerDecl: CapabilityDeclaration = { capability, priority, variant };
         resolver.registerProvider(pluginKey, providerDecl, registrationIndex++);
@@ -80,6 +102,10 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       },
 
       registerToolHandler(toolName: string, handler: ToolHandler): void {
+        // Criterion 4: throw if tool not declared in manifest
+        if (!plugin.manifest.tools.some((t) => t.name === toolName)) {
+          throw new UndeclaredToolError(pluginKey, toolName);
+        }
         toolHandlers.set(toolName, handler);
       },
 
