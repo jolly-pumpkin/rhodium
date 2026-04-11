@@ -54,12 +54,29 @@ export function collectMiddleware(plugins: readonly Plugin[]): Plugin[] {
  *                                      independently.
  *
  * Post hooks run in reverse array order (low → high priority), wrapping the
- * handler onion-style. Each post hook sees the previous hook's output.
+ * handler onion-style. Each post hook sees the previous hook's transformed
+ * result.
  *
- * Handler may be sync or async — `await handler(call)` handles both. Errors
- * from any hook or the handler propagate to the caller; `executeToolCall`
- * does not catch. Middleware hooks are invoked synchronously per the
- * `MiddlewarePlugin` contract.
+ * Post-hook `call` argument: every `postToolCall` in a given branch receives
+ * the same `ToolCall` — the one that was actually passed to the handler
+ * (i.e. after the full pre chain mutated it). Post hooks do NOT see a
+ * per-middleware-local view of the call. This matches the koa/express
+ * onion contract: the chain operates on a single "current call" value.
+ *
+ * Null skip inside fan-out: if a pre hook returns `null` for one branch of
+ * a fan-out, that branch returns `{ content: '', isError: false }`. The
+ * sentinel is indistinguishable from a real empty-content successful result.
+ * Callers that care must inspect their middleware to distinguish them, or a
+ * future ticket can introduce an explicit skipped flag on `ToolResult`.
+ *
+ * Handler may be sync or async — `await handler(call)` handles both.
+ * Middleware hooks are invoked synchronously per the `MiddlewarePlugin`
+ * contract; returning a `Promise` from `preToolCall` or `postToolCall` is
+ * a programming error and throws `TypeError` at runtime (caught statically
+ * if hook types are declared, but guarded defensively for untyped plugins).
+ *
+ * Errors from any hook or the handler propagate to the caller;
+ * `executeToolCall` does not catch.
  *
  * Return value: single call in → single `ToolResult` out. Fan-out in →
  * `ToolResult[]` (in order of final-call emission).
@@ -81,6 +98,12 @@ export async function executeToolCall(
       const hook = middlewares[i]?.preToolCall;
       if (!hook) continue;
       const out = hook(c);
+      if (out instanceof Promise) {
+        throw new TypeError(
+          `preToolCall (middleware index ${i}) returned a Promise. ` +
+            `Middleware hooks must be synchronous per the MiddlewarePlugin contract.`,
+        );
+      }
       if (out === null) {
         return [{ content: '', isError: false }];
       }
@@ -99,7 +122,14 @@ export async function executeToolCall(
     for (let i = middlewares.length - 1; i >= 0; i--) {
       const hook = middlewares[i]?.postToolCall;
       if (!hook) continue;
-      result = hook(c, result);
+      const out = hook(c, result);
+      if (out instanceof Promise) {
+        throw new TypeError(
+          `postToolCall (middleware index ${i}) returned a Promise. ` +
+            `Middleware hooks must be synchronous per the MiddlewarePlugin contract.`,
+        );
+      }
+      result = out;
     }
 
     return [result];

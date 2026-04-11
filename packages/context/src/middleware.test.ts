@@ -371,6 +371,92 @@ describe('executeToolCall — error handling', () => {
       'post boom',
     );
   });
+
+  it('async preToolCall (returning a Promise) throws TypeError at runtime', async () => {
+    // Defensive guard against an untyped plugin accidentally writing
+    // `async preToolCall`. TypeScript catches this statically for declared
+    // hook types, but the runtime check keeps the failure loud and obvious.
+    const mw = {
+      preToolCall: ((c: ToolCall) => Promise.resolve(c)) as unknown as
+        MiddlewarePlugin['preToolCall'],
+    } as MiddlewarePlugin;
+    const handler = (): ToolResult => ({ content: 'x', isError: false });
+    await expect(executeToolCall(makeCall(), handler, [mw])).rejects.toThrow(
+      TypeError,
+    );
+    await expect(executeToolCall(makeCall(), handler, [mw])).rejects.toThrow(
+      /preToolCall.*Promise/,
+    );
+  });
+
+  it('async postToolCall (returning a Promise) throws TypeError at runtime', async () => {
+    const mw = {
+      postToolCall: ((_c: ToolCall, r: ToolResult) => Promise.resolve(r)) as unknown as
+        MiddlewarePlugin['postToolCall'],
+    } as MiddlewarePlugin;
+    const handler = (): ToolResult => ({ content: 'x', isError: false });
+    await expect(executeToolCall(makeCall(), handler, [mw])).rejects.toThrow(
+      TypeError,
+    );
+    await expect(executeToolCall(makeCall(), handler, [mw])).rejects.toThrow(
+      /postToolCall.*Promise/,
+    );
+  });
+});
+
+describe('executeToolCall — documented semantics', () => {
+  it('post hook receives the handler-input call, not a per-middleware-local view', async () => {
+    // Both middlewares mutate the call via preToolCall. The contract is
+    // that every postToolCall in a branch sees the SAME call — the one
+    // that was actually passed to the handler (after the full pre chain).
+    const seenByPostHighPri: ToolCall[] = [];
+    const seenByPostLowPri: ToolCall[] = [];
+    const high: MiddlewarePlugin = {
+      preToolCall: (c) => ({ ...c, parameters: { ...c.parameters, high: true } }),
+      postToolCall: (c, r) => {
+        seenByPostHighPri.push(c);
+        return r;
+      },
+    };
+    const low: MiddlewarePlugin = {
+      preToolCall: (c) => ({ ...c, parameters: { ...c.parameters, low: true } }),
+      postToolCall: (c, r) => {
+        seenByPostLowPri.push(c);
+        return r;
+      },
+    };
+    const handler = (): ToolResult => ({ content: 'ok', isError: false });
+    await executeToolCall(makeCall(), handler, [high, low]);
+    // Both post hooks see the fully-mutated call (both `high: true` and
+    // `low: true` present). Neither sees its own pre-hook's intermediate view.
+    expect(seenByPostHighPri[0]?.parameters).toEqual({ high: true, low: true });
+    expect(seenByPostLowPri[0]?.parameters).toEqual({ high: true, low: true });
+  });
+
+  it('null skip inside fan-out produces the empty sentinel for that branch only', async () => {
+    // Documents the known ambiguity: callers cannot distinguish a null-skip
+    // branch from a real empty-content success. Other branches still run
+    // normally and produce their own results.
+    const high: MiddlewarePlugin = {
+      preToolCall: (c) => [
+        { ...c, parameters: { branch: 'keep' } },
+        { ...c, parameters: { branch: 'skip' } },
+      ],
+    };
+    const low: MiddlewarePlugin = {
+      preToolCall: (c) => (c.parameters.branch === 'skip' ? null : c),
+    };
+    const handler = (c: ToolCall): ToolResult => ({
+      content: `handled:${c.parameters.branch}`,
+      isError: false,
+    });
+    const result = await executeToolCall(makeCall(), handler, [high, low]);
+    expect(Array.isArray(result)).toBe(true);
+    const arr = result as ToolResult[];
+    expect(arr).toHaveLength(2);
+    expect(arr[0]).toEqual({ content: 'handled:keep', isError: false });
+    expect(arr[1]).toEqual({ content: '', isError: false }); // skip sentinel
+  });
 });
 
 describe('Plugin ↔ MiddlewarePlugin compatibility', () => {
