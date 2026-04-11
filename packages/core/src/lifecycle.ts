@@ -6,7 +6,7 @@ import {
   UndeclaredCapabilityError,
   UndeclaredToolError,
 } from './errors.js';
-import { createCapabilityValidator } from '../../../packages/capabilities/src/validate.js';
+import { createCapabilityValidator } from '../../../packages/capabilities/src/index.js';
 import type {
   ActivationResult,
   CapabilityDeclaration,
@@ -230,7 +230,10 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       const wrappedError =
         error instanceof ActivationTimeoutError ||
         error instanceof ActivationError ||
-        error instanceof CapabilityNotFoundError
+        error instanceof CapabilityNotFoundError ||
+        error instanceof UndeclaredCapabilityError ||
+        error instanceof UndeclaredToolError ||
+        error instanceof CapabilityViolationError
           ? error
           : new ActivationError(pluginKey, error);
 

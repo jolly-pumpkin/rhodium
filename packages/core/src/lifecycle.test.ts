@@ -1,11 +1,17 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { createLifecycleManager } from './lifecycle.js';
 import { PluginRegistry } from './registry.js';
-import { createDependencyGraph } from '../../../packages/graph/src/dag.js';
-import { createCapabilityResolver } from '../../../packages/graph/src/resolver.js';
+import { createDependencyGraph } from '../../../packages/graph/src/index.js';
+import { createCapabilityResolver } from '../../../packages/graph/src/index.js';
 import { createEventBus } from './events.js';
-import { ActivationTimeoutError, ActivationError, CapabilityViolationError } from './errors.js';
-import { defineCapability } from '../../../packages/capabilities/src/define.js';
+import {
+  ActivationTimeoutError,
+  ActivationError,
+  CapabilityViolationError,
+  UndeclaredCapabilityError,
+  UndeclaredToolError,
+} from './errors.js';
+import { defineCapability } from '../../../packages/capabilities/src/index.js';
 import type { Plugin, PluginManifest } from './types.js';
 import type { LifecycleManagerOpts } from './lifecycle.js';
 
@@ -532,6 +538,7 @@ describe('lifecycle: PluginContext.provide() manifest enforcement', () => {
 
     expect(result.failed.length).toBe(1);
     expect(result.failed[0].pluginKey).toBe('bad-provider');
+    expect(result.failed[0].error instanceof UndeclaredCapabilityError).toBe(true);
     expect(result.failed[0].error.message).toContain('undeclared-cap');
   });
 
@@ -557,6 +564,7 @@ describe('lifecycle: PluginContext.provide() manifest enforcement', () => {
     const result = await manager.activate();
     expect(result.failed.length).toBe(1);
     expect(result.failed[0].pluginKey).toBe('bad-impl');
+    expect(result.failed[0].error instanceof CapabilityViolationError).toBe(true);
     expect(result.failed[0].error.message).toContain('greeter');
   });
 
@@ -622,6 +630,7 @@ describe('lifecycle: PluginContext.registerToolHandler() manifest enforcement', 
     const result = await manager.activate();
     expect(result.failed.length).toBe(1);
     expect(result.failed[0].pluginKey).toBe('bad-tool-plugin');
+    expect(result.failed[0].error instanceof UndeclaredToolError).toBe(true);
     expect(result.failed[0].error.message).toContain('undeclared-tool');
   });
 
