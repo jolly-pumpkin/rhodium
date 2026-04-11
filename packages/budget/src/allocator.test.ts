@@ -271,3 +271,89 @@ describe('reserved token deduction', () => {
     expect(result.allocated[0]?.tokens).toBeGreaterThan(0);
   });
 });
+
+describe('proportional strategy', () => {
+  const counter = createTokenCounter('chars4');
+
+  it('gives higher priority plugins proportionally more tokens', () => {
+    // priorities 75 and 25, total=100. Budget=100. Shares: 75 and 25.
+    // content=400 chars = 100 tokens each (more than share) → both truncated
+    const result = allocateBudget(
+      [
+        { pluginKey: 'high', priority: 75, systemPromptFragment: 'x'.repeat(400) },
+        { pluginKey: 'low', priority: 25, systemPromptFragment: 'x'.repeat(400) },
+      ],
+      { maxTokens: 100, allocationStrategy: 'proportional' },
+      { tokenCounter: counter }
+    );
+    const high = result.allocated.find(a => a.pluginKey === 'high');
+    const low = result.allocated.find(a => a.pluginKey === 'low');
+    expect(high?.tokens).toBe(75);
+    expect(low?.tokens).toBe(25);
+    expect(high?.truncated).toBe(true);
+    expect(low?.truncated).toBe(true);
+  });
+
+  it('allocates full amount when contribution fits within share', () => {
+    const result = allocateBudget(
+      [{ pluginKey: 'a', priority: 50, systemPromptFragment: 'hi' }],
+      { maxTokens: 100, allocationStrategy: 'proportional' },
+      { tokenCounter: counter }
+    );
+    expect(result.allocated[0]?.truncated).toBe(false);
+  });
+
+  it('drops atomic contribution when share is insufficient', () => {
+    // 10% share of 100 = 10 tokens. Content = 100 tokens. atomic → drop.
+    const result = allocateBudget(
+      [
+        { pluginKey: 'small', priority: 10, systemPromptFragment: 'x'.repeat(400), atomic: true },
+        { pluginKey: 'large', priority: 90, systemPromptFragment: 'hi' },
+      ],
+      { maxTokens: 100, allocationStrategy: 'proportional' },
+      { tokenCounter: counter }
+    );
+    expect(result.dropped.find(d => d.pluginKey === 'small')?.reason).toBe('atomic');
+  });
+
+  it('drops contribution when share < minTokens', () => {
+    const result = allocateBudget(
+      [
+        { pluginKey: 'a', priority: 10, systemPromptFragment: 'hi', minTokens: 50 },
+        { pluginKey: 'b', priority: 90, systemPromptFragment: 'hi' },
+      ],
+      { maxTokens: 100, allocationStrategy: 'proportional' },
+      { tokenCounter: counter }
+    );
+    expect(result.dropped.find(d => d.pluginKey === 'a')?.reason).toBe('minTokens');
+  });
+
+  it('totalAllocated equals sum of allocated tokens', () => {
+    const result = allocateBudget(
+      [
+        { pluginKey: 'a', priority: 60, systemPromptFragment: 'x'.repeat(400) },
+        { pluginKey: 'b', priority: 40, systemPromptFragment: 'x'.repeat(400) },
+      ],
+      { maxTokens: 100, allocationStrategy: 'proportional' },
+      { tokenCounter: counter }
+    );
+    const sum = result.allocated.reduce((s, a) => s + a.tokens, 0);
+    expect(result.totalAllocated).toBe(sum);
+  });
+
+  it('handles zero-priority contribution (gets zero share)', () => {
+    // Zero-priority contribution gets 0% of budget in proportional strategy
+    const result = allocateBudget(
+      [
+        { pluginKey: 'zero', priority: 0, systemPromptFragment: 'hi' },
+        { pluginKey: 'normal', priority: 100, systemPromptFragment: 'hi' },
+      ],
+      { maxTokens: 100, allocationStrategy: 'proportional' },
+      { tokenCounter: counter }
+    );
+    // zero gets share=0, content>0, truncated=true (allocated 0 tokens)
+    const zero = result.allocated.find(a => a.pluginKey === 'zero');
+    expect(zero?.tokens).toBe(0);
+    expect(zero?.truncated).toBe(true);
+  });
+});
