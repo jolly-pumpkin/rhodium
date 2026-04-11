@@ -424,7 +424,10 @@ describe('createPipeline — middleware stage (Stage 5)', () => {
     expect(result.systemPrompt).toContain('appended by middleware');
   });
 
-  it('multiple middleware run in order (second sees first output)', () => {
+  it('postAssembly runs in reverse order (low-priority wraps first, high-priority wraps last)', () => {
+    // getMiddlewares() returns middleware in priority-sorted order (high → low).
+    // The pipeline iterates in reverse so mw2 (low in this priority-sorted
+    // array) runs first, and mw1 (high) wraps last — classic onion model.
     const plugin = makePlugin({
       key: 'a',
       contributeContext: () => ({ pluginKey: 'a', priority: 50, systemPromptFragment: 'base' }),
@@ -446,8 +449,30 @@ describe('createPipeline — middleware stage (Stage 5)', () => {
     });
 
     const result = assembleContext();
-    expect(order).toEqual(['mw1', 'mw2']);
-    expect(result.systemPrompt).toContain(':mw1:mw2');
+    expect(order).toEqual(['mw2', 'mw1']);
+    expect(result.systemPrompt).toContain(':mw2:mw1');
+  });
+
+  it('postAssembly onion: array [mw1, mw2, mw3] executes as mw3 → mw2 → mw1', () => {
+    const plugin = makePlugin({
+      key: 'a',
+      contributeContext: () => ({ pluginKey: 'a', priority: 50, systemPromptFragment: 'base' }),
+    });
+
+    const order: string[] = [];
+    const mk = (id: string): MiddlewarePlugin => ({
+      postAssembly: (ctx) => { order.push(id); return ctx; },
+    });
+
+    const { assembleContext } = createPipeline({
+      getActivePlugins: () => [plugin],
+      eventBus: makeEventBus(),
+      getMiddlewares: () => [mk('mw1'), mk('mw2'), mk('mw3')],
+      defaultTokenBudget: GENEROUS_BUDGET,
+    });
+
+    assembleContext();
+    expect(order).toEqual(['mw3', 'mw2', 'mw1']);
   });
 
   it('all 6 stages run: middleware sees tools after budget filtering', () => {

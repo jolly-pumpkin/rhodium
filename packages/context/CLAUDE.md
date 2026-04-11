@@ -21,7 +21,7 @@ Pipeline must complete in <5ms with 20 plugins (including budget allocation).
 5. **Middleware:** Run pre/post hooks (can add/remove tools, modify descriptions)
 6. **Serialize:** Convert to final context object
 
-**Middleware ordering:** Pre-hooks run in registration order; post-hooks run in reverse. Don't rely on relative execution across different plugins.
+**Middleware ordering:** Middleware is priority-sorted (high → low) via `collectMiddleware()`. Pre-hooks (`preToolCall`) run high → low; post-hooks (`postToolCall`, `postAssembly`) run low → high — highest priority is the outermost wrapper (onion model). Don't rely on relative execution across different plugins of equal priority.
 
 **Tool merging:** Manifest tools are baseline; `contributeContext()` tools override by name, add new ones, concatenate examples.
 

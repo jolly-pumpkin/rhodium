@@ -174,6 +174,23 @@ export type CommandHandler = (
 ) => Promise<void> | void;
 
 // ============================================================
+// Tool execution and middleware
+// ============================================================
+
+export interface ToolCall {
+  toolName: string;
+  pluginKey: string;
+  parameters: Record<string, unknown>;
+  timestamp: number;
+}
+
+export interface MiddlewarePlugin {
+  preToolCall?(call: ToolCall): ToolCall | ToolCall[] | null;
+  postToolCall?(call: ToolCall, result: ToolResult): ToolResult;
+  postAssembly?(context: AssembledContext): AssembledContext;
+}
+
+// ============================================================
 // Context assembly types
 // ============================================================
 
@@ -272,6 +289,13 @@ export interface Plugin {
   ): ContextContribution | null | undefined;
 
   onDependencyRemoved?(capability: string): void;
+
+  // Middleware hooks (RHOD-016). A plugin becomes middleware by declaring
+  // `provides: [{ capability: 'middleware', priority }]` and implementing any of
+  // these hooks. Priority comes from the CapabilityDeclaration, not the hooks.
+  preToolCall?(call: ToolCall): ToolCall | ToolCall[] | null;
+  postToolCall?(call: ToolCall, result: ToolResult): ToolResult;
+  postAssembly?(context: AssembledContext): AssembledContext;
 }
 
 // ============================================================
