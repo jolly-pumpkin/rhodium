@@ -1,4 +1,4 @@
-import { ActivationError, ActivationTimeoutError } from './errors.js';
+import { ActivationError, ActivationTimeoutError, CapabilityNotFoundError } from './errors.js';
 import type {
   ActivationResult,
   CapabilityDeclaration,
@@ -153,11 +153,11 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       const checks = graph.checkDependencies(pluginKey);
       const check = checks.find((c) => c.capability === dep.capability);
 
-      if (
-        check &&
-        check.availableProviders.length > 0 &&
-        check.availableProviders.every((p) => failedSet.has(p))
-      ) {
+      if (!check || check.availableProviders.length === 0) {
+        return true; // required dependency has no providers
+      }
+
+      if (check.availableProviders.every((p) => failedSet.has(p))) {
         return true; // all providers of a required dep failed
       }
     }
@@ -204,7 +204,7 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       const wrappedError =
         error instanceof ActivationTimeoutError ||
         error instanceof ActivationError ||
-        error.constructor.name === 'CapabilityNotFoundError'
+        error instanceof CapabilityNotFoundError
           ? error
           : new ActivationError(pluginKey, error);
 
@@ -296,6 +296,11 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       if (state === 'active') {
         return; // idempotent
       }
+
+      // Register plugin in graph for consistent ordering (hot registration)
+      const provides = plugin.manifest.provides.map((p) => p.capability);
+      const needs = plugin.manifest.needs.map((d) => d.capability);
+      graph.addPlugin(pluginKey, provides, needs);
 
       // Check that all required deps are satisfied
       for (const dep of plugin.manifest.needs) {

@@ -231,6 +231,21 @@ describe('lifecycle: dependency failure handling', () => {
     expect(result.pending).toContain('b');
   });
 
+  it('B requires A; no provider exists for A → B in pending', async () => {
+    const { manager, graph, registry } = makeLifecycleManager();
+
+    const b = makePlugin('b', {
+      manifest: { needs: [{ capability: 'missing-cap' }] },
+    });
+
+    registry.register(b);
+    graph.addPlugin('b', [], ['missing-cap']);
+
+    const result = await manager.activate();
+    expect(result.pending).toContain('b');
+    expect(result.activated.length).toBe(0);
+  });
+
   it('B optionally needs A; A fails → B activates', async () => {
     const { manager, graph, registry } = makeLifecycleManager();
 
@@ -462,6 +477,40 @@ describe('lifecycle: activatePlugin() hot path', () => {
     } catch (err) {
       expect(err instanceof Error).toBe(true);
     }
+  });
+
+  it('activatePlugin() registers plugin in graph for consistent deactivation ordering', async () => {
+    const { manager, graph, registry } = makeLifecycleManager();
+
+    const provider = makePlugin('provider', {
+      manifest: { provides: [{ capability: 'svc' }] },
+      activate: (ctx) => ctx.provide('svc', {}),
+    });
+
+    registry.register(provider);
+    graph.addPlugin('provider', ['svc'], []);
+
+    // Initial activation
+    await manager.activate();
+
+    // Hot register a consumer after initial activation
+    const consumer = makePlugin('consumer', {
+      manifest: { needs: [{ capability: 'svc' }] },
+    });
+
+    registry.register(consumer);
+
+    // activatePlugin should add to graph
+    await manager.activatePlugin('consumer');
+
+    // Verify plugin is in graph (indirectly via activation success)
+    expect(registry.getState('consumer')).toBe('active');
+
+    // Deactivate should complete without errors (correct ordering)
+    await manager.deactivate();
+
+    expect(registry.getState('consumer')).toBe('inactive');
+    expect(registry.getState('provider')).toBe('inactive');
   });
 });
 
