@@ -198,3 +198,76 @@ describe('priority strategy — constraints', () => {
     expect(result.dropped[0]?.reason).toBe('atomic');
   });
 });
+
+describe('severity computation', () => {
+  const counter = createTokenCounter('chars4');
+
+  it('severity is critical when priority > 80', () => {
+    const result = allocateBudget(
+      [{ pluginKey: 'a', priority: 81, systemPromptFragment: 'x'.repeat(40), atomic: true }],
+      { maxTokens: 1, allocationStrategy: 'priority' },
+      { tokenCounter: counter }
+    );
+    expect(result.dropped[0]?.severity).toBe('critical');
+  });
+
+  it('severity is warning when priority is 51-80', () => {
+    const result = allocateBudget(
+      [{ pluginKey: 'a', priority: 51, systemPromptFragment: 'x'.repeat(40), atomic: true }],
+      { maxTokens: 1, allocationStrategy: 'priority' },
+      { tokenCounter: counter }
+    );
+    expect(result.dropped[0]?.severity).toBe('warning');
+  });
+
+  it('severity is info when priority <= 50', () => {
+    const result = allocateBudget(
+      [{ pluginKey: 'a', priority: 50, systemPromptFragment: 'x'.repeat(40), atomic: true }],
+      { maxTokens: 1, allocationStrategy: 'priority' },
+      { tokenCounter: counter }
+    );
+    expect(result.dropped[0]?.severity).toBe('info');
+  });
+});
+
+describe('reserved token deduction', () => {
+  const counter = createTokenCounter('chars4');
+
+  it('deducts reservedSystemTokens before allocation', () => {
+    // maxTokens=100, reserved=90 → 10 available. 'x'.repeat(80)=20 tokens → truncated to 10
+    const result = allocateBudget(
+      [{ pluginKey: 'a', priority: 50, systemPromptFragment: 'x'.repeat(80) }],
+      { maxTokens: 100, reservedSystemTokens: 90, allocationStrategy: 'priority' },
+      { tokenCounter: counter }
+    );
+    expect(result.allocated[0]?.tokens).toBe(10);
+    expect(result.allocated[0]?.truncated).toBe(true);
+  });
+
+  it('deducts reservedToolTokens before allocation', () => {
+    const result = allocateBudget(
+      [{ pluginKey: 'a', priority: 50, systemPromptFragment: 'x'.repeat(80) }],
+      { maxTokens: 100, reservedToolTokens: 90, allocationStrategy: 'priority' },
+      { tokenCounter: counter }
+    );
+    expect(result.allocated[0]?.tokens).toBe(10);
+  });
+
+  it('deducts both reserved amounts', () => {
+    const result = allocateBudget(
+      [{ pluginKey: 'a', priority: 50, systemPromptFragment: 'x'.repeat(80) }],
+      { maxTokens: 100, reservedSystemTokens: 50, reservedToolTokens: 40, allocationStrategy: 'priority' },
+      { tokenCounter: counter }
+    );
+    expect(result.allocated[0]?.tokens).toBe(10);
+  });
+
+  it('uses all available when reserved amounts are 0', () => {
+    const result = allocateBudget(
+      [{ pluginKey: 'a', priority: 50, systemPromptFragment: 'hi' }],
+      { maxTokens: 100 },
+      { tokenCounter: counter }
+    );
+    expect(result.allocated[0]?.tokens).toBeGreaterThan(0);
+  });
+});
