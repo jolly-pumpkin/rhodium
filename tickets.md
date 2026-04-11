@@ -187,7 +187,7 @@ Implement `define.ts` and `validate.ts`:
 
 ## 6. Lifecycle Manager (`packages/core`)
 
-### RHOD-009: Plugin Activation & Deactivation
+### RHOD-009: Plugin Activation & Deactivation **DONE**
 **Priority:** P1 | **Size:** L | **Deps:** RHOD-005, RHOD-006, RHOD-007, RHOD-008
 
 Implement `lifecycle.ts`:
@@ -209,14 +209,14 @@ Implement `lifecycle.ts`:
 - Emit lifecycle events: `plugin:activating`, `plugin:activated`, `plugin:deactivating`, `plugin:deactivated`, `broker:activated`, `broker:deactivated`
 
 **Acceptance:**
-- [ ] Topological activation order respected
-- [ ] Parallel activation across independent chains
-- [ ] Timeout enforced
-- [ ] `ActivationResult` correctly populated
-- [ ] Error in one plugin doesn't crash others (unless dependency)
-- [ ] Hot registration works after initial `activate()`
-- [ ] All lifecycle events emitted
-- [ ] Performance: < 100ms for 20 plugins
+- [x] Topological activation order respected
+- [x] Parallel activation across independent chains
+- [x] Timeout enforced
+- [x] `ActivationResult` correctly populated
+- [x] Error in one plugin doesn't crash others (unless dependency)
+- [x] Hot registration works after initial `activate()`
+- [x] All lifecycle events emitted
+- [x] Performance: < 100ms for 20 plugins
 
 ### RHOD-010: PluginContext Implementation
 **Priority:** P1 | **Size:** M | **Deps:** RHOD-009
