@@ -25,14 +25,12 @@
       "version": "0.1.0",
       "dependencies": {
         "rhodium-core": "workspace:*",
+        "rhodium-discovery": "workspace:*",
       },
     },
     "packages/core": {
       "name": "rhodium-core",
       "version": "0.1.0",
-      "dependencies": {
-        "rhodium-capabilities": "workspace:*",
-      },
     },
     "packages/discovery": {
       "name": "rhodium-discovery",

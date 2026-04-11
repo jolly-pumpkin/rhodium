@@ -211,7 +211,7 @@ export interface AssembledTool extends ToolDeclaration {
 export interface DroppedContribution {
   pluginKey: string;
   priority: number;
-  reason: 'budget-exceeded' | 'atomic-no-fit' | 'below-min-tokens' | 'plugin-opted-out' | 'priority-below-threshold';
+  reason: 'budget-exceeded' | 'atomic-no-fit' | 'below-min-tokens' | 'plugin-opted-out' | 'priority-below-threshold' | 'error';
   estimatedTokens: number;
   severity: 'info' | 'warning' | 'critical';
 }

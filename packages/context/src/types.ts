@@ -1,24 +1,14 @@
 import type { ToolDeclaration, AssembledContext, ToolResult } from 'rhodium-core';
 
 export interface ToolCall {
-  pluginKey: string;
   toolName: string;
-  params: Record<string, unknown>;
-  callId: string;
+  pluginKey: string;
+  parameters: Record<string, unknown>;
+  timestamp: number;
 }
 
 export interface MiddlewarePlugin {
-  preToolCall?(
-    call: ToolCall
-  ): Promise<ToolCall | null> | ToolCall | null;
-
-  postToolCall?(
-    call: ToolCall,
-    result: ToolResult
-  ): Promise<ToolResult> | ToolResult;
-
-  postAssembly?(
-    context: AssembledContext,
-    tools: ToolDeclaration[]
-  ): Promise<AssembledContext> | AssembledContext;
+  preToolCall?(call: ToolCall): ToolCall | ToolCall[] | null;
+  postToolCall?(call: ToolCall, result: ToolResult): ToolResult;
+  postAssembly?(context: AssembledContext): AssembledContext;
 }

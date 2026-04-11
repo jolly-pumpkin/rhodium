@@ -13,9 +13,11 @@
   },
   "scripts": {
     "build": "tsc --emitDeclarationOnly --declarationDir ./dist && bun build ./src/index.ts --outdir ./dist --target node --format esm",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
-    "rhodium-core": "workspace:*"
+    "rhodium-core": "workspace:*",
+    "rhodium-discovery": "workspace:*"
   }
 }
