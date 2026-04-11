@@ -336,7 +336,7 @@ Implement `search.ts` and `ranking.ts`:
 
 ## 9. Context Assembly (`packages/context`)
 
-### RHOD-015: Context Assembly Pipeline
+### RHOD-015: Context Assembly Pipeline **DONE**
 **Priority:** P1 | **Size:** XL | **Deps:** RHOD-010, RHOD-012, RHOD-014
 
 Implement `pipeline.ts` — the 6-stage assembly pipeline:
@@ -353,15 +353,15 @@ Implement `pipeline.ts` — the 6-stage assembly pipeline:
 - Support `ContextRequest<TState>` generic passthrough
 
 **Acceptance:**
-- [ ] All 6 stages execute in order
-- [ ] Tool merge strategy correct (override by name, add new, concat examples)
-- [ ] Budget allocation applied correctly
-- [ ] Tool search integrated when query present
-- [ ] Middleware hooks run
-- [ ] `AssembledContext` fully populated including `meta`
-- [ ] Error in one plugin's `contributeContext()` doesn't affect others
-- [ ] Performance: < 5ms for 20 plugins
-- [ ] `context:assembled` event emitted
+- [x] All 6 stages execute in order
+- [x] Tool merge strategy correct (override by name, add new, concat examples)
+- [x] Budget allocation applied correctly
+- [x] Tool search integrated when query present
+- [x] Middleware hooks run
+- [x] `AssembledContext` fully populated including `meta`
+- [x] Error in one plugin's `contributeContext()` doesn't affect others
+- [x] Performance: < 5ms for 20 plugins
+- [x] `context:assembled` event emitted
 
 ### RHOD-016: Middleware System
 **Priority:** P2 | **Size:** M | **Deps:** RHOD-015
