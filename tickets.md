@@ -444,7 +444,7 @@ Implement assertion functions:
 
 ## 12. Main Package Re-exports
 
-### RHOD-020: `rhodium` Package Barrel Exports
+### RHOD-020: `rhodium` Package Barrel Exports **DONE**
 **Priority:** P2 | **Size:** S | **Deps:** RHOD-017, RHOD-018
 
 Configure the main `rhodium` package to re-export public API from all sub-packages:
@@ -459,10 +459,10 @@ Configure the main `rhodium` package to re-export public API from all sub-packag
 - `rhodium/testing` → test broker, assertions
 
 **Acceptance:**
-- [ ] `import { createBroker, defineCapability, Plugin } from 'rhodium'` works
-- [ ] `import { createBroker } from 'rhodium/core'` works
-- [ ] `import { createTestBroker } from 'rhodium/testing'` works
-- [ ] Tree-shaking works for sub-package imports
+- [x] `import { createBroker, defineCapability, Plugin } from 'rhodium'` works
+- [x] `import { createBroker } from 'rhodium/core'` works
+- [x] `import { createTestBroker } from 'rhodium/testing'` works
+- [x] Tree-shaking works for sub-package imports
 
 ---
 
