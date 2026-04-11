@@ -218,7 +218,7 @@ Implement `lifecycle.ts`:
 - [x] All lifecycle events emitted
 - [x] Performance: < 100ms for 20 plugins
 
-### RHOD-010: PluginContext Implementation
+### RHOD-010: PluginContext Implementation **DONE**
 **Priority:** P1 | **Size:** M | **Deps:** RHOD-009
 
 Implement the `PluginContext` interface:
@@ -233,12 +233,12 @@ Implement the `PluginContext` interface:
 - `log: PluginLogger` — scoped logger tagged with plugin key
 
 **Acceptance:**
-- [ ] All `PluginContext` methods work correctly
-- [ ] `provide()` throws if capability not in manifest
-- [ ] `provide()` runs capability validation
-- [ ] `registerToolHandler()` throws if tool not in manifest
-- [ ] Logger entries tagged with plugin key
-- [ ] New context created per plugin per activation (no state leakage)
+- [x] All `PluginContext` methods work correctly
+- [x] `provide()` throws if capability not in manifest
+- [x] `provide()` runs capability validation
+- [x] `registerToolHandler()` throws if tool not in manifest
+- [x] Logger entries tagged with plugin key
+- [x] New context created per plugin per activation (no state leakage)
 
 ---
 
