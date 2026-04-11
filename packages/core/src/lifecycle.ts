@@ -40,9 +40,67 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
   // Shared state across all activations
   const implementations = new Map<string, unknown>();
   const toolHandlers = new Map<string, ToolHandler>();
+  const toolHandlersByPlugin = new Map<string, Set<string>>();
   const commandHandlers = new Map<string, CommandHandler>();
+  const commandHandlersByPlugin = new Map<string, Set<string>>();
   let registrationIndex = 0;
   let lastActivationOrder: string[] = [];
+
+  // ── Shared resolve helpers ──────────────────────────────────────────────
+  // Extracted from createPluginContext so both the plugin-facing context and
+  // the broker-facing facade can share the same lookup path.
+
+  function resolveImpl<T>(
+    capability: string,
+    neededBy: string,
+    neededByVersion: string,
+  ): T {
+    // Pass `optional: true` so the resolver returns undefined instead of
+    // throwing its own CapabilityNotFoundError. We then throw the local class
+    // directly — this keeps the error observable as an instance of the local
+    // `CapabilityNotFoundError`, regardless of whether the resolver came from
+    // a bundled dist copy or source.
+    const entry = resolver.resolve(
+      { capability, optional: true },
+      neededBy,
+      neededByVersion,
+    );
+    if (!entry) {
+      throw new CapabilityNotFoundError(capability, neededBy, neededByVersion, []);
+    }
+    const impl = implementations.get(`${entry.pluginKey}:${capability}`);
+    if (impl === undefined) {
+      throw new Error(
+        `No implementation found for capability '${capability}' from provider '${entry.pluginKey}'`
+      );
+    }
+    return impl as T;
+  }
+
+  function resolveAllImpl<T>(
+    capability: string,
+    neededBy: string,
+    neededByVersion: string,
+  ): T[] {
+    const entries = resolver.resolveMany(
+      { capability, multiple: true, optional: true },
+      neededBy,
+      neededByVersion,
+    );
+    return entries
+      .map((e) => implementations.get(`${e.pluginKey}:${capability}`) as T | undefined)
+      .filter((v): v is T => v !== undefined);
+  }
+
+  function resolveOptionalImpl<T>(
+    capability: string,
+    neededBy: string,
+    neededByVersion: string,
+  ): T | undefined {
+    const entry = resolver.resolve({ capability, optional: true }, neededBy, neededByVersion);
+    if (!entry) return undefined;
+    return (implementations.get(`${entry.pluginKey}:${capability}`) ?? undefined) as T | undefined;
+  }
 
   function createPluginContext(pluginKey: string, plugin: Plugin): PluginContext {
     return {
@@ -50,30 +108,15 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       log: createPluginLogger(pluginKey),
 
       resolve<T>(capability: string): T {
-        const entry = resolver.resolve({ capability }, pluginKey, plugin.version);
-        if (!entry) {
-          throw new Error(`Capability '${capability}' not found for plugin '${pluginKey}'`);
-        }
-        const impl = implementations.get(`${entry.pluginKey}:${capability}`);
-        if (impl === undefined) {
-          throw new Error(
-            `No implementation found for capability '${capability}' from provider '${entry.pluginKey}'`
-          );
-        }
-        return impl as T;
+        return resolveImpl<T>(capability, pluginKey, plugin.version);
       },
 
       resolveAll<T>(capability: string): T[] {
-        const entries = resolver.resolveMany({ capability, multiple: true }, pluginKey, plugin.version);
-        return entries
-          .map((e) => implementations.get(`${e.pluginKey}:${capability}`) as T | undefined)
-          .filter((v): v is T => v !== undefined);
+        return resolveAllImpl<T>(capability, pluginKey, plugin.version);
       },
 
       resolveOptional<T>(capability: string): T | undefined {
-        const entry = resolver.resolve({ capability, optional: true }, pluginKey, plugin.version);
-        if (!entry) return undefined;
-        return (implementations.get(`${entry.pluginKey}:${capability}`) ?? undefined) as T | undefined;
+        return resolveOptionalImpl<T>(capability, pluginKey, plugin.version);
       },
 
       provide<T>(capability: string, implementation: T): void {
@@ -107,10 +150,22 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
           throw new UndeclaredToolError(pluginKey, toolName);
         }
         toolHandlers.set(toolName, handler);
+        let owned = toolHandlersByPlugin.get(pluginKey);
+        if (!owned) {
+          owned = new Set();
+          toolHandlersByPlugin.set(pluginKey, owned);
+        }
+        owned.add(toolName);
       },
 
       registerCommand(commandName: string, handler: CommandHandler): void {
         commandHandlers.set(commandName, handler);
+        let owned = commandHandlersByPlugin.get(pluginKey);
+        if (!owned) {
+          owned = new Set();
+          commandHandlersByPlugin.set(pluginKey, owned);
+        }
+        owned.add(commandName);
       },
 
       reportError(error: Error, severity?: ErrorSeverity): void {
@@ -377,5 +432,85 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
         lastActivationOrder.push(pluginKey);
       }
     },
+
+    /**
+     * Synchronously activate a single plugin. Used by the broker's
+     * `lazyActivation` path, where `assembleContext()` is synchronous by
+     * contract and therefore cannot await a plugin's `activate()` return
+     * value. If the plugin's `activate()` returns a Promise, this throws.
+     */
+    activatePluginSync(pluginKey: string): void {
+      const plugin = registry.getPlugin(pluginKey);
+      if (!plugin) {
+        throw new Error(`Plugin '${pluginKey}' not registered`);
+      }
+      if (registry.getState(pluginKey) === 'active') return; // idempotent
+
+      registry.setState(pluginKey, 'resolving');
+      eventBus.emit('plugin:activating', { pluginKey });
+
+      const start = Date.now();
+      const ctx = createPluginContext(pluginKey, plugin);
+      try {
+        const result = plugin.activate ? plugin.activate(ctx) : undefined;
+        if (result && typeof (result as Promise<unknown>).then === 'function') {
+          throw new Error(
+            `lazyActivation requires plugin.activate() to be synchronous; '${pluginKey}' returned a Promise`
+          );
+        }
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        const wrappedError =
+          error instanceof ActivationError ||
+          error instanceof CapabilityNotFoundError ||
+          error instanceof UndeclaredCapabilityError ||
+          error instanceof UndeclaredToolError ||
+          error instanceof CapabilityViolationError
+            ? error
+            : new ActivationError(pluginKey, error);
+
+        registry.setState(pluginKey, 'failed');
+        eventBus.emit('plugin:failed', { pluginKey, error: wrappedError });
+        onUnhandledError?.(wrappedError);
+        throw wrappedError;
+      }
+
+      registry.setState(pluginKey, 'active');
+      const durationMs = Date.now() - start;
+      eventBus.emit('plugin:activated', { pluginKey, durationMs });
+
+      if (!lastActivationOrder.includes(pluginKey)) {
+        lastActivationOrder.push(pluginKey);
+      }
+    },
+
+    /**
+     * Drain all lifecycle-owned state for a plugin: implementations,
+     * tool handlers, command handlers. Used by the broker's `unregister()`.
+     * This is a targeted cleanup — the caller is responsible for updating
+     * registry/graph/resolver/search-index state.
+     */
+    purgePlugin(pluginKey: string): void {
+      for (const key of Array.from(implementations.keys())) {
+        if (key.startsWith(`${pluginKey}:`)) {
+          implementations.delete(key);
+        }
+      }
+      const ownedTools = toolHandlersByPlugin.get(pluginKey);
+      if (ownedTools) {
+        for (const toolName of ownedTools) toolHandlers.delete(toolName);
+        toolHandlersByPlugin.delete(pluginKey);
+      }
+      const ownedCommands = commandHandlersByPlugin.get(pluginKey);
+      if (ownedCommands) {
+        for (const cmd of ownedCommands) commandHandlers.delete(cmd);
+        commandHandlersByPlugin.delete(pluginKey);
+      }
+    },
+
+    /** Broker-level capability resolution. Reuses the plugin-context path. */
+    resolve: resolveImpl,
+    resolveAll: resolveAllImpl,
+    resolveOptional: resolveOptionalImpl,
   };
 }
