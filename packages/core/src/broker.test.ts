@@ -123,26 +123,50 @@ describe('createBroker — register()', () => {
       manifest: {
         provides: [{ capability: 'cap-a' }],
         needs: [{ capability: 'cap-b' }],
-        tools: [],
+        tools: [{ name: 'tool-a', description: 'alpha tool' }],
       },
     });
+    // `b` has a tool so the search-index rollback assertion actually has
+    // something to miss — otherwise searchTools('unique-beta-tool') would
+    // return an empty list regardless of whether rollback occurred.
     const b = makePlugin('b', {
       manifest: {
         provides: [{ capability: 'cap-b' }],
         needs: [{ capability: 'cap-a' }],
-        tools: [],
+        tools: [{ name: 'unique-beta-tool', description: 'only in b' }],
       },
     });
     broker.register(a);
-    expect(() => broker.register(b)).toThrow(CircularDependencyError);
+
+    let caught: unknown;
+    try {
+      broker.register(b);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(CircularDependencyError);
+    // The rewrap path should preserve the cycle plugin list on the error.
+    expect((caught as CircularDependencyError).cycle).toContain('a');
+    expect((caught as CircularDependencyError).cycle).toContain('b');
+
     // b must be fully cleaned up after the rollback
     expect(broker.getPluginStates().has('b')).toBe(false);
-    // searchTools must not return anything from b (there were no tools, but
-    // also make sure the search index doesn't know about b)
-    const results = broker.searchTools({ query: 'b' });
-    for (const r of results) {
+    // Search index rollback — `b`'s unique tool name must NOT appear in any
+    // result. This only bites because `b` had a tool with a unique name;
+    // without the rollback the search index would still contain it.
+    for (const r of broker.searchTools('unique-beta-tool')) {
+      expect(r.toolName).not.toBe('unique-beta-tool');
       expect(r.pluginKey).not.toBe('b');
     }
+    // Generic search for 'b' also shouldn't return any b-owned results.
+    for (const r of broker.searchTools({ query: 'b' })) {
+      expect(r.pluginKey).not.toBe('b');
+    }
+
+    // `a` should still be registered and in the search index.
+    expect(broker.getPluginStates().get('a')).toBe('registered');
+    const aSearch = broker.searchTools('tool-a');
+    expect(aSearch.some((r) => r.pluginKey === 'a')).toBe(true);
   });
 });
 
@@ -200,6 +224,44 @@ describe('createBroker — activate() and deactivate()', () => {
     await broker.activate();
     expect(fired).toBe(1);
     expect(payload?.pluginCount).toBe(1);
+  });
+
+  it('activatePlugin() hot-registers a plugin after broker.activate()', async () => {
+    const broker = makeBroker();
+    // Initial broker.activate() with one registered plugin.
+    let aCalls = 0;
+    broker.register(
+      makePlugin('a', { activate: () => { aCalls++; } }),
+    );
+    await broker.activate();
+    expect(aCalls).toBe(1);
+    expect(broker.getPluginStates().get('a')).toBe('active');
+
+    // Hot-register a second plugin that depends on nothing and activate it.
+    let bCalls = 0;
+    broker.register(
+      makePlugin('b', {
+        manifest: {
+          provides: [{ capability: 'late-cap' }],
+          needs: [],
+          tools: [],
+        },
+        activate(ctx: PluginContext) {
+          bCalls++;
+          ctx.provide('late-cap', { hello: () => 'late' });
+        },
+      }),
+    );
+    // Before hot activation, b is still `registered`.
+    expect(broker.getPluginStates().get('b')).toBe('registered');
+
+    await broker.activatePlugin('b');
+    expect(bCalls).toBe(1);
+    expect(broker.getPluginStates().get('b')).toBe('active');
+    // Broker-level resolve now sees the hot-registered capability.
+    expect(
+      broker.resolve<{ hello: () => string }>('late-cap').hello(),
+    ).toBe('late');
   });
 });
 
@@ -363,16 +425,53 @@ describe('createBroker — getLog() and structured logging', () => {
 
   it('filters by since (timestamp)', async () => {
     const broker = makeBroker();
-    broker.register(makePlugin('foo'));
-    const cutoff = Date.now() + 1; // one millisecond into the future
-    // Ensure at least one ms passes before the next event
-    await new Promise((r) => setTimeout(r, 2));
+    // Phase 1 — pre-cutoff events (registration). We then record a cutoff
+    // AFTER waiting long enough that Date.now() will have advanced on any
+    // platform, so the cutoff cleanly separates the two phases.
+    broker.register(makePlugin('before'));
+    await new Promise((r) => setTimeout(r, 5));
+    const cutoff = Date.now();
+    await new Promise((r) => setTimeout(r, 5));
+
+    // Phase 2 — post-cutoff events.
+    broker.register(makePlugin('after'));
     await broker.activate();
 
     const log = broker.getLog({ since: cutoff });
+    // The filter must return a non-empty list — otherwise a bug that returns
+    // nothing would make the per-entry assertion pass trivially.
+    expect(log.entries.length).toBeGreaterThan(0);
     for (const entry of log.entries) {
       expect(entry.timestamp).toBeGreaterThanOrEqual(cutoff);
     }
+
+    // The post-cutoff registration must appear; the pre-cutoff one must not.
+    const keysAfter = new Set(
+      log.entries
+        .filter((e) => e.event === 'plugin:registered')
+        .map((e) => e.pluginKey),
+    );
+    expect(keysAfter.has('after')).toBe(true);
+    expect(keysAfter.has('before')).toBe(false);
+  });
+
+  it('returns a defensive copy of entries (mutation-safe)', () => {
+    const broker = makeBroker();
+    broker.register(makePlugin('foo'));
+    const first = broker.getLog();
+    expect(first.entries.length).toBeGreaterThan(0);
+
+    // Mutating the returned array must not affect subsequent reads.
+    first.entries.length = 0;
+    first.entries.push({
+      timestamp: 0,
+      event: 'plugin:registered',
+      pluginKey: 'forged',
+    });
+
+    const second = broker.getLog();
+    expect(second.entries.length).toBeGreaterThan(0);
+    expect(second.entries.some((e) => e.pluginKey === 'forged')).toBe(false);
   });
 });
 
@@ -418,6 +517,51 @@ describe('createBroker — lazyActivation', () => {
     expect(() => broker.assembleContext({ tokenBudget: { maxTokens: 1000 } })).toThrow(
       /lazyActivation/i,
     );
+  });
+
+  it('respects topological order when consumer is registered before provider', () => {
+    // Regression test: `ensureLazilyActivated()` must walk plugins in
+    // dep-before-dependent order. If it iterated in registration order, the
+    // consumer's `ctx.resolve('shared')` inside activate() would fail because
+    // the provider hadn't run `ctx.provide('shared', ...)` yet.
+    const broker = makeBroker({ lazyActivation: true });
+    const callOrder: string[] = [];
+
+    // Register CONSUMER first, PROVIDER second — reversed from dep order.
+    broker.register(
+      makePlugin('consumer', {
+        manifest: {
+          provides: [],
+          needs: [{ capability: 'shared' }],
+          tools: [],
+        },
+        activate(ctx: PluginContext) {
+          callOrder.push('consumer');
+          const impl = ctx.resolve<{ value: number }>('shared');
+          expect(impl.value).toBe(42);
+        },
+      }),
+    );
+    broker.register(
+      makePlugin('provider', {
+        manifest: {
+          provides: [{ capability: 'shared' }],
+          needs: [],
+          tools: [],
+        },
+        activate(ctx: PluginContext) {
+          callOrder.push('provider');
+          ctx.provide('shared', { value: 42 });
+        },
+      }),
+    );
+
+    // Triggers lazy activation — provider must run before consumer even
+    // though consumer was registered first.
+    broker.assembleContext({ tokenBudget: { maxTokens: 1000 } });
+    expect(callOrder).toEqual(['provider', 'consumer']);
+    expect(broker.getPluginStates().get('provider')).toBe('active');
+    expect(broker.getPluginStates().get('consumer')).toBe('active');
   });
 });
 

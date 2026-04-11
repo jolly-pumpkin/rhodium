@@ -3,7 +3,6 @@ import type {
   BrokerConfig,
   BrokerEvent,
   BrokerEventHandler,
-  BrokerEventPayload,
   BrokerLogEntry,
   BrokerLogFilter,
   Plugin,
@@ -127,10 +126,22 @@ export function createBroker(config: BrokerConfig = {}): Broker {
 
   // ── Lazy activation helper ──────────────────────────────────────────
   function ensureLazilyActivated(): void {
-    for (const plugin of registry.getAllPlugins()) {
-      if (registry.getState(plugin.key) !== 'registered') continue;
-      if (!graph.canActivate(plugin.key)) continue;
-      lifecycle.activatePluginSync(plugin.key);
+    // Walk plugins in topological (dep-before-dependent) order so a consumer
+    // registered before its provider still sees the provider activated first.
+    // `graph.canActivate` only checks that providers exist in the graph —
+    // NOT that they are already `active` — so iterating in registration order
+    // would let us activate a consumer whose provider hadn't run `ctx.provide()`
+    // yet, and `ctx.resolve()` would fail inside the consumer's activate().
+    //
+    // Errors from `activatePluginSync` propagate out — callers of
+    // `assembleContext()` get a descriptive failure (e.g. async activate in
+    // lazy mode). This matches the documented "sync-activate-or-throw"
+    // constraint on lazy activation.
+    const order = graph.getActivationOrder();
+    for (const pluginKey of order) {
+      if (registry.getState(pluginKey) !== 'registered') continue;
+      if (!graph.canActivate(pluginKey)) continue;
+      lifecycle.activatePluginSync(pluginKey);
     }
   }
 
@@ -172,18 +183,19 @@ export function createBroker(config: BrokerConfig = {}): Broker {
         // The graph package imports its error class from a bundled dist copy
         // of rhodium-core, so the `CircularDependencyError` thrown by graph
         // is a DIFFERENT constructor than the one exported from this package's
-        // source. Re-throw as the local class so `instanceof` checks work for
+        // source. Re-throw as the local class (reading the `cycle` field
+        // directly off the foreign error) so `instanceof` checks work for
         // callers importing from the source tree.
         if (
           err &&
           typeof err === 'object' &&
           (err as { code?: string }).code === 'CIRCULAR_DEPENDENCY'
         ) {
-          // Parse the cycle plugin list out of the original message.
-          const match = /Plugins in cycle: (.+)$/m.exec(
-            (err as Error).message ?? '',
-          );
-          const cycle = match?.[1]?.split(', ') ?? [plugin.key];
+          const foreign = err as { cycle?: readonly string[] };
+          const cycle =
+            Array.isArray(foreign.cycle) && foreign.cycle.length > 0
+              ? [...foreign.cycle]
+              : [plugin.key];
           throw new CircularDependencyError(cycle);
         }
         throw err;
@@ -309,7 +321,3 @@ export function createBroker(config: BrokerConfig = {}): Broker {
     },
   };
 }
-
-// Keep `BrokerEventPayload` referenced so TS's unused-import check passes in
-// environments that strip types before running. This is a no-op at runtime.
-export type __BrokerEventPayloadCheck = BrokerEventPayload['plugin:registered'];

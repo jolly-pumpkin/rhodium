@@ -62,6 +62,13 @@ export class CapabilityNotFoundError extends RhodiumError {
 export class CircularDependencyError extends RhodiumError {
   static readonly CODE = 'CIRCULAR_DEPENDENCY';
 
+  /**
+   * The detected cycle path, in order, as plugin keys.
+   * Exposed so callers (e.g. the broker's register() rewrap path) can
+   * reconstruct the error without regex-parsing the message body.
+   */
+  readonly cycle: readonly string[];
+
   constructor(cycle: string[]) {
     const chain = cycle.map((plugin, i) => {
       const next = cycle[(i + 1) % cycle.length];
@@ -81,6 +88,7 @@ export class CircularDependencyError extends RhodiumError {
     ].join('\n');
 
     super(message, CircularDependencyError.CODE);
+    this.cycle = [...cycle];
   }
 }
 

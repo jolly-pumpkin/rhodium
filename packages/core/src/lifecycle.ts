@@ -50,6 +50,21 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
   // Extracted from createPluginContext so both the plugin-facing context and
   // the broker-facing facade can share the same lookup path.
 
+  /**
+   * Collect the set of capability names currently backed by an implementation.
+   * Drives the "Available capabilities in this broker" section of
+   * `CapabilityNotFoundError` when a lookup misses.
+   */
+  function listAvailableCapabilities(): string[] {
+    const set = new Set<string>();
+    for (const key of implementations.keys()) {
+      // keys are `${pluginKey}:${capability}` — split on the first ':'.
+      const idx = key.indexOf(':');
+      if (idx >= 0) set.add(key.slice(idx + 1));
+    }
+    return [...set].sort();
+  }
+
   function resolveImpl<T>(
     capability: string,
     neededBy: string,
@@ -66,7 +81,12 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       neededByVersion,
     );
     if (!entry) {
-      throw new CapabilityNotFoundError(capability, neededBy, neededByVersion, []);
+      throw new CapabilityNotFoundError(
+        capability,
+        neededBy,
+        neededByVersion,
+        listAvailableCapabilities(),
+      );
     }
     const impl = implementations.get(`${entry.pluginKey}:${capability}`);
     if (impl === undefined) {
