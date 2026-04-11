@@ -423,3 +423,53 @@ describe('equal strategy', () => {
     expect(result.totalAllocated).toBe(0);
   });
 });
+
+describe('edge cases', () => {
+  const counter = createTokenCounter('chars4');
+
+  it('returns empty result for empty contributions — priority', () => {
+    const result = allocateBudget([], { maxTokens: 100, allocationStrategy: 'priority' });
+    expect(result).toEqual({ allocated: [], dropped: [], totalAllocated: 0 });
+  });
+
+  it('returns empty result for empty contributions — proportional', () => {
+    const result = allocateBudget([], { maxTokens: 100, allocationStrategy: 'proportional' });
+    expect(result).toEqual({ allocated: [], dropped: [], totalAllocated: 0 });
+  });
+
+  it('drops all contributions when availableTokens <= 0 after reserved deduction', () => {
+    const result = allocateBudget(
+      [
+        { pluginKey: 'a', priority: 90, systemPromptFragment: 'hi' },
+        { pluginKey: 'b', priority: 50, systemPromptFragment: 'hi' },
+      ],
+      { maxTokens: 100, reservedSystemTokens: 100, allocationStrategy: 'priority' },
+      { tokenCounter: counter }
+    );
+    expect(result.allocated).toHaveLength(0);
+    expect(result.dropped).toHaveLength(2);
+  });
+
+  it('uses priority strategy when allocationStrategy is not specified', () => {
+    const result = allocateBudget(
+      [
+        { pluginKey: 'low', priority: 10, systemPromptFragment: 'x'.repeat(40) },
+        { pluginKey: 'high', priority: 90, systemPromptFragment: 'x'.repeat(40) },
+      ],
+      { maxTokens: 10 },
+      { tokenCounter: counter }
+    );
+    expect(result.allocated[0]?.pluginKey).toBe('high');
+    expect(result.dropped[0]?.pluginKey).toBe('low');
+  });
+
+  it('does not emit when no overflow occurs', () => {
+    const emitted: unknown[] = [];
+    allocateBudget(
+      [{ pluginKey: 'a', priority: 60, systemPromptFragment: 'hi' }],
+      { maxTokens: 100, allocationStrategy: 'priority' },
+      { tokenCounter: counter, emit: (_e, p) => { emitted.push(p); } }
+    );
+    expect(emitted).toHaveLength(0);
+  });
+});
