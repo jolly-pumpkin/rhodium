@@ -137,5 +137,19 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Build artifacts
+dist/
+**/*.d.ts
+**/*.d.ts.map
+**/*.js
+**/*.js.map
+!.yarn/**
+
+# Claude Code local settings (not team-shared)
+.claude/settings.local.json
+.claude/projects/*/memory/
+
+# Development
 scratch/
 .worktrees/
