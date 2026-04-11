@@ -412,7 +412,7 @@ Implement `broker.ts` — the top-level `createBroker(config?)` function that co
 
 ## 11. Testing Utilities (`packages/testing`)
 
-### RHOD-018: `createTestBroker()` and Mock Context
+### RHOD-018: `createTestBroker()` and Mock Context **DONE**
 **Priority:** P2 | **Size:** M | **Deps:** RHOD-017
 
 Implement `test-broker.ts` and `mock-context.ts`:
@@ -422,11 +422,11 @@ Implement `test-broker.ts` and `mock-context.ts`:
 - Simplified registration flow for tests
 
 **Acceptance:**
-- [ ] `createTestBroker()` returns usable broker
-- [ ] `mockContext` records all interactions
-- [ ] Can test plugins in isolation with mock context
+- [x] `createTestBroker()` returns usable broker
+- [x] `mockContext` records all interactions
+- [x] Can test plugins in isolation with mock context
 
-### RHOD-019: Context Assertion Utilities
+### RHOD-019: Context Assertion Utilities **DONE**
 **Priority:** P2 | **Size:** S | **Deps:** RHOD-018
 
 Implement assertion functions:
@@ -436,9 +436,9 @@ Implement assertion functions:
 - `assertNoDropsAbovePriority(context, minPriority)` — parameterized version
 
 **Acceptance:**
-- [ ] All three assertions work correctly
-- [ ] Error messages include detailed diff / drop info
-- [ ] Usable in standard test frameworks (no test runner dependency)
+- [x] All three assertions work correctly
+- [x] Error messages include detailed diff / drop info
+- [x] Usable in standard test frameworks (no test runner dependency)
 
 ---
 
