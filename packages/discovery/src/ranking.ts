@@ -31,7 +31,7 @@ export function scoreDocument(queryTokens: string[], doc: IndexedTool): number {
   return score;
 }
 
-export interface ScoredResult {
+interface ScoredResult {
   doc: IndexedTool;
   /** Normalized relevance score in [0, 1]. Top result in a set is always 1.0. */
   relevanceScore: number;

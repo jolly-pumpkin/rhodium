@@ -1,4 +1,4 @@
-export const STOP_WORDS = new Set([
+const STOP_WORDS = new Set([
   'a', 'an', 'the', 'and', 'or', 'in', 'of', 'to', 'for', 'with',
   'is', 'are', 'was', 'be', 'as', 'at', 'by', 'it', 'on', 'do',
 ]);
