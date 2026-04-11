@@ -521,7 +521,7 @@ describe('createPipeline — serialize stage (Stage 6)', () => {
 });
 
 describe('createPipeline — oversized contribution handling', () => {
-  it('drops plugin gracefully when contribution exceeds maxContributionBytes, others continue', () => {
+  it('Stage 1 byte-limit: drops oversized plugin, others continue, reason is contribution-too-large', () => {
     const oversized = makePlugin({
       key: 'big',
       contributeContext: () => ({
@@ -550,7 +550,39 @@ describe('createPipeline — oversized contribution handling', () => {
     const result = assembleContext();
     expect(result.systemPrompt).toContain('from normal');
     expect(result.systemPrompt).not.toContain('x'.repeat(10));
-    expect(result.dropped.some(d => d.pluginKey === 'big' && d.reason === 'budget-exceeded')).toBe(true);
+    expect(result.dropped.some(d => d.pluginKey === 'big' && d.reason === 'contribution-too-large')).toBe(true);
+  });
+
+  it('multiple plugins: oversized one dropped, remaining pipeline unaffected', () => {
+    // Tests that the pipeline correctly isolates the oversized contribution.
+    // With 3 plugins and a tight byte limit, two fit and one is rejected.
+    const oversized = makePlugin({
+      key: 'big',
+      contributeContext: () => ({
+        pluginKey: 'big',
+        priority: 60,
+        systemPromptFragment: 'x'.repeat(500),
+      }),
+    });
+    const a = makePlugin({ key: 'a', contributeContext: () => ({ pluginKey: 'a', priority: 80, systemPromptFragment: 'from-a' }) });
+    const b = makePlugin({ key: 'b', contributeContext: () => ({ pluginKey: 'b', priority: 40, systemPromptFragment: 'from-b' }) });
+
+    const { assembleContext } = createPipeline({
+      getActivePlugins: () => [a, oversized, b],
+      eventBus: makeEventBus(),
+      getMiddlewares: () => [],
+      defaultTokenBudget: GENEROUS_BUDGET,
+      maxContributionBytes: 100,
+    });
+
+    const result = assembleContext();
+    expect(result.systemPrompt).toContain('from-a');
+    expect(result.systemPrompt).toContain('from-b');
+    expect(result.dropped).toHaveLength(1);
+    expect(result.dropped[0].pluginKey).toBe('big');
+    expect(result.dropped[0].reason).toBe('contribution-too-large');
+    expect(result.meta.contributingPlugins).toBe(2);
+    expect(result.meta.droppedPlugins).toBe(1);
   });
 });
 

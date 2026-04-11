@@ -73,6 +73,9 @@ export function createPipeline(opts: PipelineOptions): {
     // Apply includePlugins / excludePlugins filters
     const filtered = filterPlugins(allPlugins, request?.includePlugins, request?.excludePlugins);
 
+    // RemainingBudget is a static snapshot — usedTokens is always 0 at collection time.
+    // Actual allocation happens in Stage 3 (Budget). Plugins using usedTokens/remainingTokens
+    // to self-size contributions will see the pre-reserved total, not a live-draining view.
     const remainingBudget: RemainingBudget = {
       totalTokens: budget.maxTokens,
       usedTokens: 0,
@@ -115,6 +118,7 @@ export function createPipeline(opts: PipelineOptions): {
 
       // Enforce maxContributionBytes per ARD §10: reject oversized contributions
       // before they enter the budget pipeline (Stage 1, not Stage 3).
+      // Uses 'contribution-too-large' to distinguish from token-budget drops ('budget-exceeded').
       const text = contributionText(contribution);
       const bytes = new TextEncoder().encode(text).length;
       if (bytes > maxBytes) {
@@ -122,7 +126,7 @@ export function createPipeline(opts: PipelineOptions): {
         errorDropped.push({
           pluginKey: contribution.pluginKey,
           priority: contribution.priority,
-          reason: 'budget-exceeded',
+          reason: 'contribution-too-large',
           estimatedTokens: counter(text),
           severity,
         });

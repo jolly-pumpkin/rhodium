@@ -55,7 +55,7 @@ export interface BudgetOverflowPayload {
   priority: number;
   severity: 'info' | 'warning' | 'critical';
   droppedTokens: number;
-  reason: 'atomic' | 'minTokens' | 'overflow';
+  reason: 'atomic-no-fit' | 'below-min-tokens' | 'budget-exceeded';
 }
 
 export type BrokerEventPayload = {
@@ -211,7 +211,7 @@ export interface AssembledTool extends ToolDeclaration {
 export interface DroppedContribution {
   pluginKey: string;
   priority: number;
-  reason: 'budget-exceeded' | 'atomic-no-fit' | 'below-min-tokens' | 'plugin-opted-out' | 'priority-below-threshold' | 'error';
+  reason: 'budget-exceeded' | 'atomic-no-fit' | 'below-min-tokens' | 'plugin-opted-out' | 'priority-below-threshold' | 'error' | 'contribution-too-large';
   estimatedTokens: number;
   severity: 'info' | 'warning' | 'critical';
 }
