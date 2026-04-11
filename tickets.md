@@ -312,7 +312,7 @@ Implement `index-builder.ts`:
 - [x] Weighted fields stored correctly
 - [x] Zero external dependencies
 
-### RHOD-014: Tool Search & Ranking
+### RHOD-014: Tool Search & Ranking **DONE**
 **Priority:** P1 | **Size:** M | **Deps:** RHOD-013
 
 Implement `search.ts` and `ranking.ts`:
@@ -325,12 +325,12 @@ Implement `search.ts` and `ranking.ts`:
 - Performance: < 2ms for 100 tools
 
 **Acceptance:**
-- [ ] Natural language queries return relevant tools
-- [ ] Structured filters narrow results correctly
-- [ ] Scoring weights match ARD spec
-- [ ] `limit` and `minRelevance` work
-- [ ] Performance target met
-- [ ] Unit tests with realistic tool sets
+- [x] Natural language queries return relevant tools
+- [x] Structured filters narrow results correctly
+- [x] Scoring weights match ARD spec
+- [x] `limit` and `minRelevance` work
+- [x] Performance target met
+- [x] Unit tests with realistic tool sets
 
 ---
 
