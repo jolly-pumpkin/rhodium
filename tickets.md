@@ -386,7 +386,7 @@ Implement `middleware.ts`:
 
 ## 10. Broker Facade (`packages/core`)
 
-### RHOD-017: `createBroker()` Public API
+### RHOD-017: `createBroker()` Public API **DONE**
 **Priority:** P1 | **Size:** L | **Deps:** RHOD-009, RHOD-015
 
 Implement `broker.ts` — the top-level `createBroker(config?)` function that composes all subsystems:
@@ -400,13 +400,13 @@ Implement `broker.ts` — the top-level `createBroker(config?)` function that co
 - Zero module-level mutable state (ADR-009)
 
 **Acceptance:**
-- [ ] Full `Broker` interface implemented
-- [ ] All config defaults applied
-- [ ] Lazy activation works when enabled
-- [ ] Structured logging works in debug mode
-- [ ] `getLog()` filtering by event type and plugin key
-- [ ] Two brokers in same process are fully independent
-- [ ] End-to-end test: register plugins, activate, assemble context, resolve capabilities
+- [x] Full `Broker` interface implemented
+- [x] All config defaults applied
+- [x] Lazy activation works when enabled
+- [x] Structured logging works in debug mode
+- [x] `getLog()` filtering by event type and plugin key
+- [x] Two brokers in same process are fully independent
+- [x] End-to-end test: register plugins, activate, assemble context, resolve capabilities
 
 ---
 
