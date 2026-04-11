@@ -70,14 +70,53 @@ export function allocateBudget(
 
 type EmitFn = AllocatorOptions['emit'];
 
-// Strategy stubs — implement in subsequent tasks
 function allocatePriority(
-  _contributions: ContextContribution[],
-  _availableTokens: number,
-  _counter: TokenCounter,
-  _emit: EmitFn
+  contributions: ContextContribution[],
+  availableTokens: number,
+  counter: TokenCounter,
+  emit: EmitFn
 ): AllocationResult {
-  return { allocated: [], dropped: [], totalAllocated: 0 };
+  const sorted = [...contributions].sort((a, b) => b.priority - a.priority);
+  const allocated: AllocationResult['allocated'] = [];
+  const dropped: DroppedContribution[] = [];
+  let remaining = availableTokens;
+
+  for (const c of sorted) {
+    const estimated = estimateTokens(c, counter);
+    const severity = computeSeverity(c.priority);
+
+    // atomic takes precedence over minTokens when content won't fit
+    if (c.atomic && estimated > remaining) {
+      dropped.push({ pluginKey: c.pluginKey, priority: c.priority, reason: 'atomic', estimatedTokens: estimated, severity });
+      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated, reason: 'atomic' });
+      continue;
+    }
+
+    // minTokens check (after atomic, so atomic contributions with minTokens are caught above)
+    if (c.minTokens !== undefined && remaining < c.minTokens) {
+      dropped.push({ pluginKey: c.pluginKey, priority: c.priority, reason: 'minTokens', estimatedTokens: estimated, severity });
+      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated, reason: 'minTokens' });
+      continue;
+    }
+
+    if (remaining === 0) {
+      // No budget left — drop with budget reason
+      dropped.push({ pluginKey: c.pluginKey, priority: c.priority, reason: 'budget', estimatedTokens: estimated, severity });
+      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated, reason: 'overflow' });
+    } else if (estimated <= remaining) {
+      // Fits fully
+      allocated.push({ pluginKey: c.pluginKey, tokens: estimated, truncated: false });
+      remaining -= estimated;
+    } else {
+      // Non-atomic truncation: give what's left
+      allocated.push({ pluginKey: c.pluginKey, tokens: remaining, truncated: true });
+      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated - remaining, reason: 'overflow' });
+      remaining = 0;
+    }
+  }
+
+  const totalAllocated = allocated.reduce((sum, a) => sum + a.tokens, 0);
+  return { allocated, dropped, totalAllocated };
 }
 
 function allocateProportional(
