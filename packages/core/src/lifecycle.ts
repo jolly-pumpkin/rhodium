@@ -191,6 +191,27 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
     return false;
   }
 
+  function getUnmetDependencies(pluginKey: string, failedSet: Set<string>): string[] {
+    const plugin = registry.getPlugin(pluginKey);
+    if (!plugin) return [];
+
+    const unmet: string[] = [];
+    for (const dep of plugin.manifest.needs) {
+      if (dep.optional) continue;
+
+      const checks = graph.checkDependencies(pluginKey);
+      const check = checks.find((c) => c.capability === dep.capability);
+
+      if (!check || check.availableProviders.length === 0) {
+        unmet.push(dep.capability);
+      } else if (check.availableProviders.every((p) => failedSet.has(p))) {
+        unmet.push(dep.capability);
+      }
+    }
+
+    return unmet;
+  }
+
   async function activateSingle(
     pluginKey: string,
     activated: string[],
@@ -252,7 +273,7 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       const start = Date.now();
       const activated: string[] = [];
       const failed: Array<{ pluginKey: string; error: Error }> = [];
-      const pending: string[] = [];
+      const pending: Array<{ pluginKey: string; unmetDependencies: string[] }> = [];
       const failedSet = new Set<string>();
 
       const order = graph.getActivationOrder();
@@ -262,7 +283,12 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       for (const wave of waves) {
         const toActivate = wave.filter((key) => !shouldSkip(key, failedSet));
         const skipped = wave.filter((key) => shouldSkip(key, failedSet));
-        pending.push(...skipped);
+        for (const pluginKey of skipped) {
+          pending.push({
+            pluginKey,
+            unmetDependencies: getUnmetDependencies(pluginKey, failedSet),
+          });
+        }
 
         const results = await Promise.allSettled(
           toActivate.map((key) => activateSingle(key, activated, failed, failedSet))
@@ -341,11 +367,10 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       const failed: Array<{ pluginKey: string; error: Error }> = [];
       const failedSet = new Set<string>();
 
+      // activateSingle will throw if plugin activation fails. If successful, activated array
+      // will be populated. The failed array is provided for consistency with the main activate()
+      // flow but is not used in hot registration since any error will re-throw.
       await activateSingle(pluginKey, activated, failed, failedSet);
-
-      if (failed.length > 0) {
-        throw failed[0].error;
-      }
 
       // Add to lastActivationOrder for deactivate()
       if (!lastActivationOrder.includes(pluginKey)) {

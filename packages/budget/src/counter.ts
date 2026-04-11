@@ -2,7 +2,7 @@ import { createRequire } from 'module';
 import type { TokenCounterStrategy, TokenCounter } from './types.js';
 
 export function createTokenCounter(
-  strategy: TokenCounterStrategy = 'chars4'
+  strategy: TokenCounterStrategy = 'chars3'
 ): TokenCounter {
   if (strategy === 'chars4') {
     return (text: string) => Math.ceil(text.length / 4);

@@ -211,7 +211,7 @@ export interface AssembledTool extends ToolDeclaration {
 export interface DroppedContribution {
   pluginKey: string;
   priority: number;
-  reason: 'budget' | 'atomic' | 'minTokens' | 'error' | 'filtered';
+  reason: 'budget-exceeded' | 'atomic-no-fit' | 'below-min-tokens' | 'plugin-opted-out' | 'priority-below-threshold';
   estimatedTokens: number;
   severity: 'info' | 'warning' | 'critical';
 }
@@ -281,7 +281,7 @@ export interface Plugin {
 export interface ActivationResult {
   activated: string[];
   failed: Array<{ pluginKey: string; error: Error }>;
-  pending: string[];
+  pending: Array<{ pluginKey: string; unmetDependencies: string[] }>;
   durationMs: number;
 }
 

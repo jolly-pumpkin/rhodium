@@ -235,7 +235,8 @@ describe('lifecycle: dependency failure handling', () => {
 
     const result = await manager.activate();
     expect(result.failed[0].pluginKey).toBe('a');
-    expect(result.pending).toContain('b');
+    expect(result.pending.some((p) => p.pluginKey === 'b')).toBe(true);
+    expect(result.pending.find((p) => p.pluginKey === 'b')?.unmetDependencies).toEqual(['cap-a']);
   });
 
   it('B requires A; no provider exists for A → B in pending', async () => {
@@ -249,7 +250,8 @@ describe('lifecycle: dependency failure handling', () => {
     graph.addPlugin('b', [], ['missing-cap']);
 
     const result = await manager.activate();
-    expect(result.pending).toContain('b');
+    expect(result.pending.some((p) => p.pluginKey === 'b')).toBe(true);
+    expect(result.pending.find((p) => p.pluginKey === 'b')?.unmetDependencies).toEqual(['missing-cap']);
     expect(result.activated.length).toBe(0);
   });
 

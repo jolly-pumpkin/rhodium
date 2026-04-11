@@ -249,14 +249,14 @@ Implement the `PluginContext` interface:
 
 Implement `counter.ts`:
 
-- `chars3` strategy: `Math.ceil(text.length / 3)`
-- `chars4` strategy: `Math.ceil(text.length / 4)` (default, industry standard per ADR-004)
+- `chars3` strategy: `Math.ceil(text.length / 3)` (default, conservative for code-heavy payloads per ADR-004)
+- `chars4` strategy: `Math.ceil(text.length / 4)` (optional, for prose-dominant use cases)
 - `tiktoken` strategy: optional peer dep integration
 - Custom function strategy: `(text: string) => number`
 - Factory: `createTokenCounter(config) => (text: string) => number`
 
 **Acceptance:**
-- [x] Default is `chars4` (industry standard, ADR-004 compliant)
+- [x] Default is `chars3` (conservative, code-heavy accuracy per ADR-004)
 - [x] All 4 strategies work
 - [x] Custom function passthrough works
 - [x] Zero dependencies for chars strategies

@@ -98,7 +98,7 @@ describe('priority strategy — basic allocation', () => {
     expect(result.allocated[0]?.pluginKey).toBe('high');
     expect(result.dropped).toHaveLength(1);
     expect(result.dropped[0]?.pluginKey).toBe('low');
-    expect(result.dropped[0]?.reason).toBe('budget');
+    expect(result.dropped[0]?.reason).toBe('budget-exceeded');
   });
 
   it('allocates all contributions when budget is sufficient', () => {
@@ -142,7 +142,7 @@ describe('priority strategy — basic allocation', () => {
     );
     expect(emitted).toHaveLength(1);
     expect(emitted[0]?.event).toBe('budget:overflow');
-    expect((emitted[0]?.payload as Record<string, unknown>).reason).toBe('overflow');
+    expect((emitted[0]?.payload as Record<string, unknown>).reason).toBe('budget-exceeded');
     expect((emitted[0]?.payload as Record<string, unknown>).pluginKey).toBe('low');
   });
 });
@@ -157,7 +157,7 @@ describe('priority strategy — constraints', () => {
       { tokenCounter: counter }
     );
     expect(result.allocated).toHaveLength(0);
-    expect(result.dropped[0]?.reason).toBe('atomic');
+    expect(result.dropped[0]?.reason).toBe('atomic-no-fit');
   });
 
   it('never marks atomic contribution as truncated (allocates fully if budget allows)', () => {
@@ -175,7 +175,7 @@ describe('priority strategy — constraints', () => {
       { maxTokens: 5, allocationStrategy: 'priority' },
       { tokenCounter: counter }
     );
-    expect(result.dropped[0]?.reason).toBe('minTokens');
+    expect(result.dropped[0]?.reason).toBe('below-min-tokens');
   });
 
   it('allocates contribution when remaining >= minTokens', () => {
@@ -195,7 +195,7 @@ describe('priority strategy — constraints', () => {
       { maxTokens: 5, allocationStrategy: 'priority' },
       { tokenCounter: counter }
     );
-    expect(result.dropped[0]?.reason).toBe('atomic');
+    expect(result.dropped[0]?.reason).toBe('atomic-no-fit');
   });
 });
 
@@ -313,7 +313,7 @@ describe('proportional strategy', () => {
       { maxTokens: 100, allocationStrategy: 'proportional' },
       { tokenCounter: counter }
     );
-    expect(result.dropped.find(d => d.pluginKey === 'small')?.reason).toBe('atomic');
+    expect(result.dropped.find(d => d.pluginKey === 'small')?.reason).toBe('atomic-no-fit');
   });
 
   it('drops contribution when share < minTokens', () => {
@@ -325,7 +325,7 @@ describe('proportional strategy', () => {
       { maxTokens: 100, allocationStrategy: 'proportional' },
       { tokenCounter: counter }
     );
-    expect(result.dropped.find(d => d.pluginKey === 'a')?.reason).toBe('minTokens');
+    expect(result.dropped.find(d => d.pluginKey === 'a')?.reason).toBe('below-min-tokens');
   });
 
   it('totalAllocated equals sum of allocated tokens', () => {
@@ -385,7 +385,7 @@ describe('equal strategy', () => {
       { maxTokens: 100, allocationStrategy: 'equal' },
       { tokenCounter: counter }
     );
-    expect(result.dropped.find(d => d.pluginKey === 'a')?.reason).toBe('atomic');
+    expect(result.dropped.find(d => d.pluginKey === 'a')?.reason).toBe('atomic-no-fit');
   });
 
   it('drops contribution when share < minTokens', () => {
@@ -397,7 +397,7 @@ describe('equal strategy', () => {
       { maxTokens: 100, allocationStrategy: 'equal' },
       { tokenCounter: counter }
     );
-    expect(result.dropped.find(d => d.pluginKey === 'a')?.reason).toBe('minTokens');
+    expect(result.dropped.find(d => d.pluginKey === 'a')?.reason).toBe('below-min-tokens');
   });
 
   it('totalAllocated equals sum of allocated tokens', () => {

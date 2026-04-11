@@ -87,22 +87,22 @@ function allocatePriority(
 
     // atomic takes precedence over minTokens when content won't fit
     if (c.atomic && estimated > remaining) {
-      dropped.push({ pluginKey: c.pluginKey, priority: c.priority, reason: 'atomic', estimatedTokens: estimated, severity });
-      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated, reason: 'atomic' });
+      dropped.push({ pluginKey: c.pluginKey, priority: c.priority, reason: 'atomic-no-fit', estimatedTokens: estimated, severity });
+      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated, reason: 'atomic-no-fit' });
       continue;
     }
 
     // minTokens check (after atomic, so atomic contributions with minTokens are caught above)
     if (c.minTokens !== undefined && remaining < c.minTokens) {
-      dropped.push({ pluginKey: c.pluginKey, priority: c.priority, reason: 'minTokens', estimatedTokens: estimated, severity });
-      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated, reason: 'minTokens' });
+      dropped.push({ pluginKey: c.pluginKey, priority: c.priority, reason: 'below-min-tokens', estimatedTokens: estimated, severity });
+      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated, reason: 'below-min-tokens' });
       continue;
     }
 
     if (remaining === 0) {
       // No budget left — drop with budget reason
-      dropped.push({ pluginKey: c.pluginKey, priority: c.priority, reason: 'budget', estimatedTokens: estimated, severity });
-      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated, reason: 'overflow' });
+      dropped.push({ pluginKey: c.pluginKey, priority: c.priority, reason: 'budget-exceeded', estimatedTokens: estimated, severity });
+      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated, reason: 'budget-exceeded' });
     } else if (estimated <= remaining) {
       // Fits fully
       allocated.push({ pluginKey: c.pluginKey, tokens: estimated, truncated: false });
@@ -110,7 +110,7 @@ function allocatePriority(
     } else {
       // Non-atomic truncation: give what's left
       allocated.push({ pluginKey: c.pluginKey, tokens: remaining, truncated: true });
-      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated - remaining, reason: 'overflow' });
+      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated - remaining, reason: 'budget-exceeded' });
       remaining = 0;
     }
   }
@@ -138,14 +138,14 @@ function allocateProportional(
 
     // atomic before minTokens
     if (c.atomic && estimated > share) {
-      dropped.push({ pluginKey: c.pluginKey, priority: c.priority, reason: 'atomic', estimatedTokens: estimated, severity });
-      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated, reason: 'atomic' });
+      dropped.push({ pluginKey: c.pluginKey, priority: c.priority, reason: 'atomic-no-fit', estimatedTokens: estimated, severity });
+      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated, reason: 'atomic-no-fit' });
       continue;
     }
 
     if (c.minTokens !== undefined && share < c.minTokens) {
-      dropped.push({ pluginKey: c.pluginKey, priority: c.priority, reason: 'minTokens', estimatedTokens: estimated, severity });
-      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated, reason: 'minTokens' });
+      dropped.push({ pluginKey: c.pluginKey, priority: c.priority, reason: 'below-min-tokens', estimatedTokens: estimated, severity });
+      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated, reason: 'below-min-tokens' });
       continue;
     }
 
@@ -153,7 +153,7 @@ function allocateProportional(
     const truncated = actualTokens < estimated;
     allocated.push({ pluginKey: c.pluginKey, tokens: actualTokens, truncated });
     if (truncated) {
-      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated - actualTokens, reason: 'overflow' });
+      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated - actualTokens, reason: 'budget-exceeded' });
     }
   }
 
@@ -181,14 +181,14 @@ function allocateEqual(
 
     // atomic before minTokens
     if (c.atomic && estimated > share) {
-      dropped.push({ pluginKey: c.pluginKey, priority: c.priority, reason: 'atomic', estimatedTokens: estimated, severity });
-      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated, reason: 'atomic' });
+      dropped.push({ pluginKey: c.pluginKey, priority: c.priority, reason: 'atomic-no-fit', estimatedTokens: estimated, severity });
+      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated, reason: 'atomic-no-fit' });
       continue;
     }
 
     if (c.minTokens !== undefined && share < c.minTokens) {
-      dropped.push({ pluginKey: c.pluginKey, priority: c.priority, reason: 'minTokens', estimatedTokens: estimated, severity });
-      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated, reason: 'minTokens' });
+      dropped.push({ pluginKey: c.pluginKey, priority: c.priority, reason: 'below-min-tokens', estimatedTokens: estimated, severity });
+      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated, reason: 'below-min-tokens' });
       continue;
     }
 
@@ -196,7 +196,7 @@ function allocateEqual(
     const truncated = actualTokens < estimated;
     allocated.push({ pluginKey: c.pluginKey, tokens: actualTokens, truncated });
     if (truncated) {
-      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated - actualTokens, reason: 'overflow' });
+      emit?.('budget:overflow', { pluginKey: c.pluginKey, priority: c.priority, severity, droppedTokens: estimated - actualTokens, reason: 'budget-exceeded' });
     }
   }
 
