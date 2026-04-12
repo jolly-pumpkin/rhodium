@@ -497,10 +497,10 @@ Write stress tests per ARD Section 13:
 - Test `atomic` and `minTokens` edge cases
 
 **Acceptance:**
-- [ ] High-priority plugins survive budget pressure
-- [ ] `assertNoCriticalDrops` passes
-- [ ] All allocation strategies tested under constraint
-- [ ] `atomic` and `minTokens` edge cases covered
+- [x] High-priority plugins survive budget pressure
+- [x] `assertNoCriticalDrops` passes
+- [x] All allocation strategies tested under constraint
+- [x] `atomic` and `minTokens` edge cases covered
 
 ### RHOD-023: Performance Benchmarks
 **Priority:** P3 | **Size:** M | **Deps:** RHOD-017
