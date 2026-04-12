@@ -292,3 +292,101 @@ describe('atomic edge case', () => {
     expect(context.meta.contributingPlugins).toBeGreaterThan(0);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// minTokens edge cases (allocator-direct)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// minTokens declares "I am only useful if I get at least N tokens."
+// The allocator drops the contribution (rather than truncating it to something
+// meaningless) when remaining budget < minTokens. These tests drive allocateBudget()
+// directly — no broker ceremony needed for isolated allocator behavior.
+
+describe('minTokens edge cases (allocator-direct)', () => {
+  const counter = createTokenCounter('chars4');
+
+  it('drops contribution when available budget is below minTokens', () => {
+    // Assessor needs at least 500 tokens to be useful, but only 300 available.
+    const result = allocateBudget(
+      [
+        {
+          pluginKey: 'llm-safety-assessor',
+          priority: 90,
+          systemPromptFragment: 'x'.repeat(400), // ~100 tokens content
+          minTokens: 500,
+        },
+      ],
+      { maxTokens: 300, allocationStrategy: 'priority' },
+      { tokenCounter: counter },
+    );
+    expect(result.dropped).toHaveLength(1);
+    expect(result.dropped[0]?.pluginKey).toBe('llm-safety-assessor');
+    expect(result.dropped[0]?.reason).toBe('below-min-tokens');
+  });
+
+  it('allocates when available budget meets minTokens exactly', () => {
+    // Content = ~100 tokens (400 chars), minTokens = 100, budget = 100 → exact fit.
+    const result = allocateBudget(
+      [
+        {
+          pluginKey: 'llm-safety-assessor',
+          priority: 90,
+          systemPromptFragment: 'x'.repeat(400), // ceil(400/4) = 100 tokens
+          minTokens: 100,
+        },
+      ],
+      { maxTokens: 100, allocationStrategy: 'priority' },
+      { tokenCounter: counter },
+    );
+    expect(result.allocated).toHaveLength(1);
+    expect(result.dropped).toHaveLength(0);
+  });
+
+  it('drops when atomic-no-fit takes priority over below-min-tokens (both conditions fire)', () => {
+    // estimated=100 tokens, remaining=50, minTokens=80
+    // Both atomic-no-fit AND below-min-tokens would fire — atomic wins as the reason.
+    const result = allocateBudget(
+      [
+        {
+          pluginKey: 'llm-safety-assessor',
+          priority: 90,
+          systemPromptFragment: 'x'.repeat(400), // ~100 tokens
+          atomic: true,
+          minTokens: 80,
+        },
+      ],
+      { maxTokens: 50, allocationStrategy: 'priority' },
+      { tokenCounter: counter },
+    );
+    expect(result.dropped[0]?.reason).toBe('atomic-no-fit');
+  });
+
+  it('minTokens drop under proportional pressure: assessor share < minTokens', () => {
+    // 16 contributions (assessor + 15 cleanup). proportional strategy.
+    // Total priority = 510. Assessor share = floor(90/510 * 800) = 141 tokens.
+    // minTokens: 200 → 141 < 200 → drop with below-min-tokens.
+    const contributions = [
+      {
+        pluginKey: 'llm-safety-assessor',
+        priority: 90,
+        systemPromptFragment: 'x'.repeat(1200), // ~300 tokens content
+        minTokens: 200,
+      },
+      ...Array.from({ length: 15 }, (_, i) => ({
+        pluginKey: `cleanup-rule-${i + 1}`,
+        priority: 21 + i,
+        systemPromptFragment: 'x'.repeat(200), // ~50 tokens each
+      })),
+    ];
+    const result = allocateBudget(
+      contributions,
+      { maxTokens: 800, allocationStrategy: 'proportional' },
+      { tokenCounter: counter },
+    );
+    const assessorDrop = result.dropped.find(
+      d => d.pluginKey === 'llm-safety-assessor',
+    );
+    expect(assessorDrop).toBeDefined();
+    expect(assessorDrop?.reason).toBe('below-min-tokens');
+  });
+});
