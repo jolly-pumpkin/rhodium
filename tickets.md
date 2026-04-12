@@ -468,7 +468,7 @@ Configure the main `rhodium` package to re-export public API from all sub-packag
 
 ## 13. Integration & Validation
 
-### RHOD-021: End-to-End Integration Test
+### RHOD-021: End-to-End Integration Test **DONE**
 **Priority:** P2 | **Size:** L | **Deps:** RHOD-017
 
 Implement the "Minimal Working Example" from ARD Appendix B as an integration test:
@@ -480,10 +480,10 @@ Implement the "Minimal Working Example" from ARD Appendix B as an integration te
 - Verify command execution
 
 **Acceptance:**
-- [ ] Full example from ARD Appendix B runs successfully
-- [ ] Context assembly produces expected output
-- [ ] Capability resolution works end-to-end
-- [ ] Tool handler invocation works
+- [x] Full example from ARD Appendix B runs successfully
+- [x] Context assembly produces expected output
+- [x] Capability resolution works end-to-end
+- [x] Tool handler invocation works
 
 ### RHOD-022: Budget Stress Test Suite
 **Priority:** P2 | **Size:** M | **Deps:** RHOD-017, RHOD-019
