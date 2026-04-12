@@ -1,17 +1,17 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import type { Plugin, AssembledContext } from './index.js';
-import { createBroker } from './index.js';
 import {
+  createBroker,
   assertNoCriticalDrops,
   assertContextIncludes,
-} from '../../testing/src/assertions.js';
-import { allocateBudget } from '../../budget/src/allocator.js';
-import { createTokenCounter } from '../../budget/src/counter.js';
+  allocateBudget,
+  createTokenCounter,
+} from './index.js';
 
 // ── Plugin factory ────────────────────────────────────────────────────────────
 //
 // Produces generic cleanup-rule plugins with:
-//   - non-critical priority (21–35, all below the assessor's 90)
+//   - priority: 20 + n (pass n in [1,15] for the 21–35 non-critical range, all below the assessor's 90)
 //   - ~50 tokens of content at chars/4 (200 chars / 4 = 50 tokens)
 
 function makeCleanupPlugin(n: number, size = 200): Plugin {
@@ -22,7 +22,7 @@ function makeCleanupPlugin(n: number, size = 200): Plugin {
     contributeContext() {
       return {
         pluginKey: `cleanup-rule-${n}`,
-        priority: 20 + n, // 21–35
+        priority: 20 + n,
         systemPromptFragment: 'x'.repeat(size),
       };
     },
