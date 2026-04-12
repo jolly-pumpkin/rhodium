@@ -160,3 +160,52 @@ describe('proportional strategy under pressure', () => {
     expect(context.totalTokens).toBeLessThanOrEqual(1200);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Equal strategy under pressure
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Budget: 800 tokens. 16 plugins → floor(800/16) = 50 tokens each (accounting share).
+// The assessor gets only 50-token accounting share despite needing ~335 tokens.
+// No plugin is dropped — equal strategy truncates accounting only, never evicts.
+// This documents that equal strategy does NOT protect high-priority critical context:
+// use priority or proportional if critical plugins must retain their full allocation.
+
+describe('equal strategy under pressure', () => {
+  let context: AssembledContext;
+  let broker: ReturnType<typeof createBroker>;
+
+  beforeAll(async () => {
+    broker = createBroker();
+    for (let i = 1; i <= 15; i++) broker.register(makeCleanupPlugin(i));
+    broker.register(safetyAssessor);
+    await broker.activate();
+    context = broker.assembleContext({
+      tokenBudget: { maxTokens: 800, allocationStrategy: 'equal' },
+    });
+  });
+
+  afterAll(async () => {
+    await broker.deactivate();
+  });
+
+  it('safety assessor tool survives (equal allocation)', () => {
+    assertContextIncludes(context, { tools: ['assess_safety'] });
+  });
+
+  it('no critical drops (truncation is not a drop)', () => {
+    expect(() => assertNoCriticalDrops(context)).not.toThrow();
+  });
+
+  it('equal strategy never drops plugins — all 16 contribute', () => {
+    expect(context.dropped.length).toBe(0);
+    expect(context.meta.contributingPlugins).toBe(16);
+  });
+
+  it('assessor is not in dropped (accounting-truncated, not evicted)', () => {
+    const assessorDrop = context.dropped.find(
+      d => d.pluginKey === 'llm-safety-assessor',
+    );
+    expect(assessorDrop).toBeUndefined();
+  });
+});
