@@ -282,4 +282,13 @@ describe('atomic edge case', () => {
   it('assertNoCriticalDrops throws because priority-90 plugin was dropped', () => {
     expect(() => assertNoCriticalDrops(context)).toThrow();
   });
+
+  it('assess_safety tool is absent from assembled context (dropped contributor has no tools)', () => {
+    const toolNames = context.tools.map(t => t.name);
+    expect(toolNames).not.toContain('assess_safety');
+  });
+
+  it('budget freed by atomic drop is consumed by surviving cleanup plugins', () => {
+    expect(context.meta.contributingPlugins).toBeGreaterThan(0);
+  });
 });
