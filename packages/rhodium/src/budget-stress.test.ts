@@ -102,3 +102,46 @@ describe('priority strategy under pressure', () => {
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Proportional strategy under pressure
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Budget: 800 tokens. Total priority = 510 (90 + sum of 21..35).
+// Assessor share = floor(90/510 × 800) = 141 tokens — less than its ~335 token
+// content, so it is truncated (not dropped). assertNoCriticalDrops passes because
+// truncation ≠ drop. The tool still appears in assembled context.
+
+describe('proportional strategy under pressure', () => {
+  let context: AssembledContext;
+  let broker: ReturnType<typeof createBroker>;
+
+  beforeAll(async () => {
+    broker = createBroker();
+    for (let i = 1; i <= 15; i++) broker.register(makeCleanupPlugin(i));
+    broker.register(safetyAssessor);
+    await broker.activate();
+    context = broker.assembleContext({
+      tokenBudget: { maxTokens: 800, allocationStrategy: 'proportional' },
+    });
+  });
+
+  afterAll(async () => {
+    await broker.deactivate();
+  });
+
+  it('safety assessor tool survives (proportional allocation)', () => {
+    assertContextIncludes(context, { tools: ['assess_safety'] });
+  });
+
+  it('no critical drops', () => {
+    expect(() => assertNoCriticalDrops(context)).not.toThrow();
+  });
+
+  it('assessor is not in dropped (truncated, not dropped)', () => {
+    const assessorDrop = context.dropped.find(
+      d => d.pluginKey === 'llm-safety-assessor',
+    );
+    expect(assessorDrop).toBeUndefined();
+  });
+});
