@@ -344,7 +344,8 @@ describe('minTokens edge cases (allocator-direct)', () => {
 
   it('drops when atomic-no-fit takes priority over below-min-tokens (both conditions fire)', () => {
     // estimated=100 tokens, remaining=50, minTokens=80
-    // Both atomic-no-fit AND below-min-tokens would fire — atomic wins as the reason.
+    // atomic check fires first (100 > 50) and short-circuits via continue —
+    // the below-min-tokens guard is never reached. atomic takes unconditional precedence.
     const result = allocateBudget(
       [
         {
@@ -388,5 +389,25 @@ describe('minTokens edge cases (allocator-direct)', () => {
     );
     expect(assessorDrop).toBeDefined();
     expect(assessorDrop?.reason).toBe('below-min-tokens');
+  });
+
+  it('below-min-tokens fires for atomic contributions when content fits but remaining < minTokens', () => {
+    // Content=40 tokens fits within remaining=50 → atomic guard does NOT fire (40 <= 50).
+    // But remaining=50 < minTokens=80 → below-min-tokens fires instead.
+    // Confirms minTokens still protects atomic contributions from useless allocations.
+    const result = allocateBudget(
+      [
+        {
+          pluginKey: 'llm-safety-assessor',
+          priority: 90,
+          systemPromptFragment: 'x'.repeat(160), // ceil(160/4) = 40 tokens
+          atomic: true,
+          minTokens: 80,
+        },
+      ],
+      { maxTokens: 50, allocationStrategy: 'priority' },
+      { tokenCounter: counter },
+    );
+    expect(result.dropped[0]?.reason).toBe('below-min-tokens');
   });
 });
