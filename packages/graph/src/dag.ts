@@ -140,26 +140,30 @@ export function createDependencyGraph(): DependencyGraph {
         }
       }
 
-      // Kahn's algorithm
-      const queue: string[] = [];
-      for (const [pluginKey, degree] of inDegree) {
-        if (degree === 0) {
-          queue.push(pluginKey);
-        }
-      }
+      // Kahn's algorithm with alphabetical tie-breaking for determinism
+      // Collect zero-inDegree nodes and sort alphabetically
+      const seeds = [...inDegree.entries()]
+        .filter(([, degree]) => degree === 0)
+        .map(([key]) => key)
+        .sort();
+      const queue: string[] = [...seeds];
 
       const result: string[] = [];
       while (queue.length > 0) {
         const node = queue.shift()!;
         result.push(node);
 
+        // Collect newly-unblocked nodes and sort before enqueueing
+        const newlyReady: string[] = [];
         const neighbors = reverseAdj.get(node)!;
         for (const neighbor of neighbors) {
           inDegree.set(neighbor, (inDegree.get(neighbor) ?? 0) - 1);
           if (inDegree.get(neighbor) === 0) {
-            queue.push(neighbor);
+            newlyReady.push(neighbor);
           }
         }
+        newlyReady.sort();
+        queue.push(...newlyReady);
       }
 
       return result;
@@ -197,7 +201,8 @@ export function createDependencyGraph(): DependencyGraph {
       }
 
       // BFS from pluginKey in reverse adjacency
-      const visited = new Set<string>();
+      // Mark start node visited to prevent self-referential results
+      const visited = new Set<string>([pluginKey]);
       const queue: string[] = [pluginKey];
 
       while (queue.length > 0) {
@@ -212,7 +217,9 @@ export function createDependencyGraph(): DependencyGraph {
         }
       }
 
-      return Array.from(visited);
+      // Exclude start node from result (return only true dependents)
+      visited.delete(pluginKey);
+      return Array.from(visited).sort();
     },
 
     checkDependencies(pluginKey: string): DependencyCheck[] {

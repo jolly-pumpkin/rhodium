@@ -116,8 +116,14 @@ export function createMockContext(
     },
 
     resolveAll<T>(capability: string): T[] {
-      const preset = multipleResolutions[capability];
-      return (preset ?? []) as T[];
+      const preset = (multipleResolutions[capability] ?? []) as T[];
+      if (providedCapabilities.has(capability)) {
+        const provided = providedCapabilities.get(capability) as T;
+        // Include provided value if not already in preset
+        const hasProvided = preset.some(v => v === provided);
+        return hasProvided ? preset : [provided, ...preset];
+      }
+      return preset;
     },
 
     resolveOptional<T>(capability: string): T | undefined {

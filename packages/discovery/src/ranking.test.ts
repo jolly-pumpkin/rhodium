@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { scoreDocument, rankResults } from './ranking.js';
-import type { IndexedTool } from './index-builder.js';
+import type { IndexedTool, CorpusStats } from './index-builder.js';
 
 function makeDoc(overrides: Partial<IndexedTool> = {}): IndexedTool {
   return {
@@ -17,50 +17,75 @@ function makeDoc(overrides: Partial<IndexedTool> = {}): IndexedTool {
   };
 }
 
+function makeCorpusStats(overrides: Partial<CorpusStats> = {}): CorpusStats {
+  return {
+    termDocFreq: new Map(),
+    totalDocs: 1,
+    ...overrides,
+  };
+}
+
 describe('scoreDocument()', () => {
   it('returns 0 for empty query tokens', () => {
     const doc = makeDoc({ nameTokens: ['read', 'read', 'read'] });
-    expect(scoreDocument([], doc)).toBe(0);
+    const stats = makeCorpusStats({ termDocFreq: new Map([['read', 1]]) });
+    expect(scoreDocument([], doc, stats)).toBe(0);
   });
 
   it('returns 0 when no query token appears in any field', () => {
     const doc = makeDoc({ nameTokens: ['write', 'write', 'write'] });
-    expect(scoreDocument(['read'], doc)).toBe(0);
+    const stats = makeCorpusStats({ termDocFreq: new Map([['read', 1]]) });
+    expect(scoreDocument(['read'], doc, stats)).toBe(0);
   });
 
-  it('counts occurrences in nameTokens (pre-repeated 3×)', () => {
+  it('counts occurrences in nameTokens (pre-repeated 3×) with IDF weighting', () => {
     const doc = makeDoc({ nameTokens: ['read', 'read', 'read'] });
-    expect(scoreDocument(['read'], doc)).toBe(3);
+    // With 1 doc total and 'read' in 1 doc: IDF = log((1+1)/(1+1)) + 1 = log(1) + 1 = 1
+    const stats = makeCorpusStats({ termDocFreq: new Map([['read', 1]]), totalDocs: 1 });
+    expect(scoreDocument(['read'], doc, stats)).toBe(3); // 3 TF × 1 IDF = 3
   });
 
-  it('counts occurrences in descriptionTokens (pre-repeated 2×)', () => {
+  it('counts occurrences in descriptionTokens (pre-repeated 2×) with IDF weighting', () => {
     const doc = makeDoc({ descriptionTokens: ['read', 'read'] });
-    expect(scoreDocument(['read'], doc)).toBe(2);
+    const stats = makeCorpusStats({ termDocFreq: new Map([['read', 1]]), totalDocs: 1 });
+    expect(scoreDocument(['read'], doc, stats)).toBe(2); // 2 TF × 1 IDF = 2
   });
 
-  it('sums across all token fields', () => {
-    // name 3× + description 2× = 5
+  it('sums across all token fields (with IDF for each term)', () => {
+    // name 3× + description 2× = 5 (with single-doc corpus, IDF = 1 for all)
     const doc = makeDoc({
       nameTokens: ['read', 'read', 'read'],
       descriptionTokens: ['read', 'read'],
     });
-    expect(scoreDocument(['read'], doc)).toBe(5);
+    const stats = makeCorpusStats({ termDocFreq: new Map([['read', 1]]), totalDocs: 1 });
+    expect(scoreDocument(['read'], doc, stats)).toBe(5);
   });
 
-  it('sums across multiple query tokens', () => {
+  it('sums across multiple query tokens (with IDF weighting)', () => {
     const doc = makeDoc({
       nameTokens: ['read', 'read', 'read'],
       descriptionTokens: ['file', 'file'],
     });
-    expect(scoreDocument(['read', 'file'], doc)).toBe(5);
+    const stats = makeCorpusStats({
+      termDocFreq: new Map([['read', 1], ['file', 1]]),
+      totalDocs: 1,
+    });
+    expect(scoreDocument(['read', 'file'], doc, stats)).toBe(5);
   });
 
-  it('a name-field match scores higher than a description-only match', () => {
-    const nameMatch = makeDoc({ nameTokens: ['read', 'read', 'read'] });
-    const descMatch = makeDoc({ descriptionTokens: ['read', 'read'] });
-    expect(scoreDocument(['read'], nameMatch)).toBeGreaterThan(
-      scoreDocument(['read'], descMatch),
-    );
+  it('rare tokens score higher than common tokens (IDF effect)', () => {
+    const nameMatch = makeDoc({ nameTokens: ['rare', 'rare', 'rare'] });
+    const commonMatch = makeDoc({ nameTokens: ['read', 'read', 'read'] });
+    // 'rare' appears in 1 doc out of 100, 'read' appears in 50 docs out of 100
+    // IDF(rare) = log((100+1)/(1+1)) + 1 ≈ log(50.5) + 1 ≈ 4.93
+    // IDF(read) = log((100+1)/(50+1)) + 1 ≈ log(1.98) + 1 ≈ 1.69
+    const stats = makeCorpusStats({
+      termDocFreq: new Map([['rare', 1], ['read', 50]]),
+      totalDocs: 100,
+    });
+    const rareScore = scoreDocument(['rare'], nameMatch, stats);
+    const commonScore = scoreDocument(['read'], commonMatch, stats);
+    expect(rareScore).toBeGreaterThan(commonScore);
   });
 });
 

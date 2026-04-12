@@ -70,13 +70,13 @@ const BROKER_VERSION = '0.0.0';
  * in the same process are fully independent (ADR-009).
  */
 export function createBroker(config: BrokerConfig = {}): Broker {
-  // ── Defaults (ticket overrides the pipeline's chars4 default) ───────
+  // ── Defaults ───────────────────────────────────────────────────────
   const activationTimeoutMs = config.activationTimeoutMs ?? 30_000;
   const maxContributionBytes = config.maxContributionBytes ?? 262_144;
   const debug = config.debug ?? false;
   const lazyActivation = config.lazyActivation ?? false;
 
-  const tokenCounterOpt = config.tokenCounter ?? 'chars3';
+  const tokenCounterOpt = config.tokenCounter ?? 'chars4';
   const tokenCounter: TokenCounter =
     typeof tokenCounterOpt === 'function'
       ? tokenCounterOpt

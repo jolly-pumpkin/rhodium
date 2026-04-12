@@ -65,9 +65,10 @@ export function searchTools(
     return [];
   }
 
+  const corpusStats = index.getCorpusStats();
   const scored = candidates.map(doc => ({
     doc,
-    rawScore: scoreDocument(queryTokens, doc),
+    rawScore: scoreDocument(queryTokens, doc, corpusStats),
   }));
 
   return rankResults(scored, minRelevance, limit).map(r =>

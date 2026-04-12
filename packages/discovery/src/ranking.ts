@@ -1,15 +1,20 @@
-import type { IndexedTool } from './index-builder.js';
+import type { IndexedTool, CorpusStats } from './index-builder.js';
 
 /**
- * Compute a raw relevance score for a document against query tokens.
+ * Compute a raw relevance score for a document against query tokens using TF-IDF.
  *
- * Builds a frequency map from the document's pre-weighted token arrays
+ * Builds a term frequency (TF) map from the document's pre-weighted token arrays
  * (name 3×, description 2×, toolTags 2×, pluginTags 1×, pluginDescription 1×)
- * and sums the frequency of each query token.
+ * and weights each query token using inverse document frequency (IDF):
+ *   IDF = log((totalDocs + 1) / (docFreq + 1)) + 1
  *
  * Returns 0 if queryTokens is empty.
  */
-export function scoreDocument(queryTokens: string[], doc: IndexedTool): number {
+export function scoreDocument(
+  queryTokens: string[],
+  doc: IndexedTool,
+  corpusStats: CorpusStats,
+): number {
   if (queryTokens.length === 0) return 0;
 
   const freq = new Map<string, number>();
@@ -24,9 +29,15 @@ export function scoreDocument(queryTokens: string[], doc: IndexedTool): number {
     freq.set(t, (freq.get(t) ?? 0) + 1);
   }
 
+  const { totalDocs } = corpusStats;
   let score = 0;
   for (const token of queryTokens) {
-    score += freq.get(token) ?? 0;
+    const tf = freq.get(token) ?? 0;
+    if (tf === 0) continue;
+
+    const df = corpusStats.termDocFreq.get(token) ?? 0;
+    const idf = Math.log((totalDocs + 1) / (df + 1)) + 1;
+    score += tf * idf;
   }
   return score;
 }

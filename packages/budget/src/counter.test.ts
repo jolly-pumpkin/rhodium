@@ -5,8 +5,9 @@ describe('createTokenCounter', () => {
   describe('chars4 strategy (default)', () => {
     it('no-arg default is chars4', () => {
       const count = createTokenCounter();
-      // Math.ceil(5 / 4) = 2
-      expect(count('hello')).toBe(2);
+      // Math.ceil(4 / 4) = 1 (chars4), Math.ceil(4 / 3) = 2 (chars3)
+      // Use 4-char string to discriminate between chars3 and chars4
+      expect(count('abcd')).toBe(1);
     });
 
     it('explicit chars4', () => {

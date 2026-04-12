@@ -40,6 +40,13 @@ export interface IndexedTool {
   readonly pluginDescriptionTokens: readonly string[];
 }
 
+export interface CorpusStats {
+  /** Map of term → number of documents containing that term */
+  readonly termDocFreq: ReadonlyMap<string, number>;
+  /** Total number of indexed documents */
+  readonly totalDocs: number;
+}
+
 export interface SearchIndex {
   addPlugin(pluginKey: string, manifest: PluginManifest): void;
   removePlugin(pluginKey: string): void;
@@ -51,6 +58,8 @@ export interface SearchIndex {
    * AND semantics: a tool must carry every tag in the list.
    */
   filterByTags(tags: string[]): string[];
+  /** Return corpus-level statistics for IDF weighting in ranking */
+  getCorpusStats(): CorpusStats;
   readonly size: number;
 }
 
@@ -67,6 +76,8 @@ export function createSearchIndex(): SearchIndex {
   const pluginMeta = new Map<string, { tags: string[] }>();
   /** Inverted tag index: normalizedTag → Set of doc keys carrying that tag */
   const byTag = new Map<string, Set<string>>();
+  /** Document frequency for IDF: term → number of documents containing that term */
+  const termDocFreq = new Map<string, number>();
 
   function docKey(pluginKey: string, toolName: string): string {
     return `${pluginKey}:${toolName}`;
@@ -121,6 +132,21 @@ export function createSearchIndex(): SearchIndex {
         documents.set(key, doc);
         pluginDocKeys.add(key);
 
+        // Track document frequency: increment count for each unique token in this doc
+        const uniqueTerms = new Set<string>();
+        for (const token of [
+          ...doc.nameTokens,
+          ...doc.descriptionTokens,
+          ...doc.toolTagTokens,
+          ...doc.pluginTagTokens,
+          ...doc.pluginDescriptionTokens,
+        ]) {
+          uniqueTerms.add(token);
+        }
+        for (const term of uniqueTerms) {
+          termDocFreq.set(term, (termDocFreq.get(term) ?? 0) + 1);
+        }
+
         for (const tag of tool.tags ?? []) addToTagIndex(tag, key);
         for (const tag of manifest.tags ?? []) addToTagIndex(tag, key);
       }
@@ -136,6 +162,27 @@ export function createSearchIndex(): SearchIndex {
         const doc = documents.get(key)!;
         for (const tag of doc.tags) removeFromTagIndex(tag, key);
         for (const tag of meta.tags) removeFromTagIndex(tag, key);
+
+        // Decrement document frequency for each unique token in this doc
+        const uniqueTerms = new Set<string>();
+        for (const token of [
+          ...doc.nameTokens,
+          ...doc.descriptionTokens,
+          ...doc.toolTagTokens,
+          ...doc.pluginTagTokens,
+          ...doc.pluginDescriptionTokens,
+        ]) {
+          uniqueTerms.add(token);
+        }
+        for (const term of uniqueTerms) {
+          const count = (termDocFreq.get(term) ?? 0) - 1;
+          if (count <= 0) {
+            termDocFreq.delete(term);
+          } else {
+            termDocFreq.set(term, count);
+          }
+        }
+
         documents.delete(key);
       }
 
@@ -170,6 +217,13 @@ export function createSearchIndex(): SearchIndex {
         }
       }
       return result;
+    },
+
+    getCorpusStats(): CorpusStats {
+      return {
+        termDocFreq,
+        totalDocs: documents.size,
+      };
     },
 
     get size(): number {

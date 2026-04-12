@@ -89,6 +89,19 @@ describe('Diamond dependency', () => {
     expect(dependentsOfA).toContain('c');
     expect(dependentsOfA).toContain('d');
   });
+
+  it('getDependents returns sorted results (deterministic order)', () => {
+    const graph = createDependencyGraph();
+    // Register in reverse-alphabetical order to test deterministic sorting
+    graph.addPlugin('provider', ['cap'], []);
+    graph.addPlugin('zebra', [], ['cap']);
+    graph.addPlugin('mango', [], ['cap']);
+    graph.addPlugin('apple', [], ['cap']);
+
+    const dependents = graph.getDependents('provider');
+    // Should be alphabetically sorted despite registration order
+    expect(dependents).toEqual(['apple', 'mango', 'zebra']);
+  });
 });
 
 // === Independent Groups ===
@@ -339,5 +352,39 @@ describe('addPlugin idempotence', () => {
     const order2 = graph.getActivationOrder();
 
     expect(order1).toEqual(order2);
+  });
+});
+
+// === Determinism ===
+
+describe('getActivationOrder determinism', () => {
+  it('independent plugins are ordered alphabetically (deterministic tie-breaking)', () => {
+    const graph = createDependencyGraph();
+    // Add two independent plugins in reverse-alphabetical order
+    graph.addPlugin('zebra', [], []);
+    graph.addPlugin('apple', [], []);
+    graph.addPlugin('mango', [], []);
+
+    const order = graph.getActivationOrder();
+
+    // Despite registration order, topological sort should produce alphabetical order
+    expect(order).toEqual(['apple', 'mango', 'zebra']);
+  });
+
+  it('mixed independent and dependent plugins maintain determinism', () => {
+    const graph = createDependencyGraph();
+    // Register in reverse order to test determinism
+    // Note: graph tracks provides, not needs. zebra provides cap-x, mango needs cap-x
+    graph.addPlugin('zebra', ['cap-x'], []);
+    graph.addPlugin('mango', [], ['cap-x']);
+    graph.addPlugin('apple', [], []);
+
+    const order = graph.getActivationOrder();
+
+    // Independent node (apple, zebra-no-deps) sorted first
+    // Then mango which depends on cap-x (depends on zebra transitively)
+    // Expected: apple and zebra are independent (sorted), then mango after its provider zebra
+    expect(order[0]).toBe('apple');
+    expect(order.indexOf('zebra')).toBeLessThan(order.indexOf('mango'));
   });
 });

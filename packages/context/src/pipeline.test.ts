@@ -641,3 +641,38 @@ describe('createPipeline — performance', () => {
   });
 });
 
+describe('createPipeline — droppedPlugins count', () => {
+  it('counts unique dropped plugins (deduplicates on pluginKey)', () => {
+    // Test that droppedPlugins counts unique plugins, not dropped records
+    // Using the tight budget from line 27: maxTokens:10
+    const high = makePlugin({
+      key: 'high',
+      contributeContext: () => ({
+        pluginKey: 'high',
+        priority: 90,
+        systemPromptFragment: 'high priority content that takes tokens', // 38 chars = 10 tokens
+      }),
+    });
+    const low = makePlugin({
+      key: 'low',
+      contributeContext: () => ({
+        pluginKey: 'low',
+        priority: 10,
+        systemPromptFragment: 'low priority content', // 20 chars = 5 tokens, won't fit
+      }),
+    });
+
+    const { assembleContext } = createPipeline({
+      getActivePlugins: () => [high, low],
+      eventBus: makeEventBus(),
+      getMiddlewares: () => [],
+      defaultTokenBudget: TIGHT_BUDGET,
+    });
+
+    const result = assembleContext();
+    // 'low' should be dropped once (or multiple times internally, but count as 1 unique plugin)
+    expect(result.dropped.some(d => d.pluginKey === 'low')).toBe(true);
+    expect(result.meta.droppedPlugins).toBe(1);
+  });
+});
+

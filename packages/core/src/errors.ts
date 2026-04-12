@@ -110,6 +110,7 @@ export class ActivationTimeoutError extends RhodiumError {
 
 export class ActivationError extends RhodiumError {
   static readonly CODE = 'ACTIVATION_FAILED';
+  readonly cause: Error;
 
   constructor(pluginKey: string, cause: Error) {
     super(
@@ -117,6 +118,7 @@ export class ActivationError extends RhodiumError {
       ActivationError.CODE,
       pluginKey
     );
+    this.cause = cause;
   }
 }
 
@@ -244,6 +246,7 @@ export class DuplicateToolError extends RhodiumError {
 
 export class ToolExecutionError extends RhodiumError {
   static readonly CODE = 'TOOL_EXECUTION_FAILED';
+  readonly cause: Error;
 
   constructor(pluginKey: string, toolName: string, cause: Error) {
     super(
@@ -251,6 +254,7 @@ export class ToolExecutionError extends RhodiumError {
       ToolExecutionError.CODE,
       pluginKey
     );
+    this.cause = cause;
   }
 }
 

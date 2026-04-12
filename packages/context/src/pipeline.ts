@@ -221,7 +221,7 @@ export function createPipeline(opts: PipelineOptions): {
       meta: {
         totalPlugins,
         contributingPlugins: allocated.length,
-        droppedPlugins: allDropped.length,
+        droppedPlugins: new Set(allDropped.map(d => d.pluginKey)).size,
         allocationStrategy: budget.allocationStrategy ?? 'priority',
         durationMs: 0, // filled at end
         tokenCounter: counterName,

@@ -79,6 +79,21 @@ describe('createMockContext — provide / resolve', () => {
     expect(ctx.resolveAll('middleware')).toHaveLength(2);
     expect(ctx.resolveAll('unknown')).toEqual([]);
   });
+
+  it('resolveAll() includes providedCapabilities alongside preset values', () => {
+    const impl1 = { name: 'provided' };
+    const impl2 = { name: 'preset1' };
+    const impl3 = { name: 'preset2' };
+    const ctx = createMockContext({
+      multipleResolutions: { handlers: [impl2, impl3] },
+    });
+    ctx.provide('handlers', impl1);
+    const result = ctx.resolveAll('handlers');
+    expect(result).toHaveLength(3);
+    expect(result[0]).toBe(impl1); // provided comes first
+    expect(result).toContain(impl2); // preset values included
+    expect(result).toContain(impl3);
+  });
 });
 
 describe('createMockContext — tool + command recording', () => {
