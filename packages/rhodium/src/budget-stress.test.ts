@@ -217,3 +217,69 @@ describe('equal strategy under pressure', () => {
     expect(context.totalTokens).toBeLessThanOrEqual(1200); // sanity bound
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// atomic edge case
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Safety assessor with atomic: true and ~600-token content (plus ~35 tool-JSON tokens).
+// Budget: 400 tokens. With priority strategy, assessor goes first (priority 90)
+// but needs ~635 tokens total — more than the entire 400-token budget.
+// atomic: true converts the silent truncation into an explicit drop (atomic-no-fit).
+// A truncated safety policy is worse than no policy: it appears complete but is missing
+// critical rules. The drop shows up in context.dropped, causing assertNoCriticalDrops to throw.
+
+describe('atomic edge case', () => {
+  let context: AssembledContext;
+  let broker: ReturnType<typeof createBroker>;
+
+  const atomicAssessor: Plugin = {
+    key: 'llm-safety-assessor',
+    version: '1.0.0',
+    manifest: { provides: [], needs: [], tools: [ASSESSOR_TOOL] },
+    contributeContext() {
+      return {
+        pluginKey: 'llm-safety-assessor',
+        priority: 90,
+        systemPromptFragment: 'x'.repeat(2400), // ~600 tokens — must fit entirely or not at all
+        atomic: true,
+        tools: [ASSESSOR_TOOL],
+      };
+    },
+  };
+
+  beforeAll(async () => {
+    broker = createBroker();
+    for (let i = 1; i <= 15; i++) broker.register(makeCleanupPlugin(i));
+    broker.register(atomicAssessor);
+    await broker.activate();
+    // Budget 400: assessor needs ~635 tokens → atomic drop.
+    // Cleanup plugins (50 tokens each) then consume remaining 400 tokens.
+    context = broker.assembleContext({
+      tokenBudget: { maxTokens: 400, allocationStrategy: 'priority' },
+    });
+  });
+
+  afterAll(async () => {
+    await broker.deactivate();
+  });
+
+  it('atomic assessor is dropped with reason atomic-no-fit', () => {
+    const drop = context.dropped.find(
+      d => d.pluginKey === 'llm-safety-assessor',
+    );
+    expect(drop).toBeDefined();
+    expect(drop?.reason).toBe('atomic-no-fit');
+  });
+
+  it('dropped assessor has severity critical (priority 90 > 80)', () => {
+    const drop = context.dropped.find(
+      d => d.pluginKey === 'llm-safety-assessor',
+    );
+    expect(drop?.severity).toBe('critical');
+  });
+
+  it('assertNoCriticalDrops throws because priority-90 plugin was dropped', () => {
+    expect(() => assertNoCriticalDrops(context)).toThrow();
+  });
+});
