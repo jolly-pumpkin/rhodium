@@ -58,8 +58,9 @@ const safetyAssessor: Plugin = {
 // Priority strategy under pressure
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// Budget: 800 tokens. Safety assessor (priority 90) goes first and takes ~300.
-// Remaining 500 tokens fit 10 cleanup plugins (10 × 50 = 500). Last 5 are dropped.
+// Budget: 800 tokens. Safety assessor (priority 90) goes first and takes ~335 tokens
+// (1200-char prompt + tool JSON serialization). Remaining ~465 tokens fit 9 cleanup
+// plugins fully; one is truncated; the lowest-priority 5 are dropped.
 
 describe('priority strategy under pressure', () => {
   let context: AssembledContext;
@@ -95,6 +96,7 @@ describe('priority strategy under pressure', () => {
   });
 
   it('all dropped plugins are non-critical (priority ≤ 80)', () => {
+    expect(context.dropped.length).toBeGreaterThan(0); // guard: ensures assertions below actually run
     for (const d of context.dropped) {
       expect(d.priority).toBeLessThanOrEqual(80);
     }
