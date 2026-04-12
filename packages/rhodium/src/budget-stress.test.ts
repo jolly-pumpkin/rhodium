@@ -208,4 +208,12 @@ describe('equal strategy under pressure', () => {
     );
     expect(assessorDrop).toBeUndefined();
   });
+
+  it('totalTokens exceeds the accounting budget — full text is never physically truncated', () => {
+    // All 16 plugins contribute full text because the pipeline never physically
+    // shortens surviving plugins' systemPromptFragments. The 800-token "budget"
+    // is accounting-only. Actual output is the full concatenation of all fragments.
+    expect(context.totalTokens).toBeGreaterThan(800);
+    expect(context.totalTokens).toBeLessThanOrEqual(1200); // sanity bound
+  });
 });
