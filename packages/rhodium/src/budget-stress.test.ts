@@ -342,7 +342,7 @@ describe('minTokens edge cases (allocator-direct)', () => {
     expect(result.dropped).toHaveLength(0);
   });
 
-  it('drops when atomic-no-fit takes priority over below-min-tokens (both conditions fire)', () => {
+  it('atomic-no-fit takes precedence: atomic short-circuits before below-min-tokens is checked', () => {
     // estimated=100 tokens, remaining=50, minTokens=80
     // atomic check fires first (100 > 50) and short-circuits via continue —
     // the below-min-tokens guard is never reached. atomic takes unconditional precedence.
