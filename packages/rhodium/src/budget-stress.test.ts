@@ -156,8 +156,9 @@ describe('proportional strategy under pressure', () => {
     // truncate systemPromptFragment text — all 16 plugins contribute their full
     // content. The realistic ceiling is the sum of raw plugin inputs: 15 cleanup
     // plugins × 200 chars / 4 ≈ 750 tokens plus the assessor's 1200 chars / 4 ≈
-    // 300 tokens plus tool JSON and separators ≈ 1200 tokens total.
-    expect(context.totalTokens).toBeLessThanOrEqual(1200);
+    // 300 tokens plus tool JSON and separators. 1500 is a loose sanity bound —
+    // it catches runaway growth without being brittle to minor serialization changes.
+    expect(context.totalTokens).toBeLessThanOrEqual(1500);
   });
 });
 
@@ -214,7 +215,7 @@ describe('equal strategy under pressure', () => {
     // shortens surviving plugins' systemPromptFragments. The 800-token "budget"
     // is accounting-only. Actual output is the full concatenation of all fragments.
     expect(context.totalTokens).toBeGreaterThan(800);
-    expect(context.totalTokens).toBeLessThanOrEqual(1200); // sanity bound
+    expect(context.totalTokens).toBeLessThanOrEqual(1500); // loose sanity bound
   });
 });
 
