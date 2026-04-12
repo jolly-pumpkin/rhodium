@@ -11,7 +11,7 @@ import {
 // ── Plugin factory ────────────────────────────────────────────────────────────
 //
 // Produces generic cleanup-rule plugins with:
-//   - priority: 20 + n (pass n in [1,15] for the 21–35 non-critical range, all below the assessor's 90)
+//   - priority: 20 + n (well below the critical threshold of > 80)
 //   - ~50 tokens of content at chars/4 (200 chars / 4 = 50 tokens)
 
 function makeCleanupPlugin(n: number, size = 200): Plugin {
