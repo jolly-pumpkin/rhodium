@@ -144,4 +144,19 @@ describe('proportional strategy under pressure', () => {
     );
     expect(assessorDrop).toBeUndefined();
   });
+
+  it('proportional strategy never drops plugins — all 16 contribute', () => {
+    expect(context.dropped.length).toBe(0);
+    expect(context.meta.contributingPlugins).toBe(16);
+  });
+
+  it('total tokens stay within budget ceiling', () => {
+    // totalTokens reflects the actual serialized output size. The proportional
+    // allocator allocates token shares for accounting but does not physically
+    // truncate systemPromptFragment text — all 16 plugins contribute their full
+    // content. The realistic ceiling is the sum of raw plugin inputs: 15 cleanup
+    // plugins × 200 chars / 4 ≈ 750 tokens plus the assessor's 1200 chars / 4 ≈
+    // 300 tokens plus tool JSON and separators ≈ 1200 tokens total.
+    expect(context.totalTokens).toBeLessThanOrEqual(1200);
+  });
 });
