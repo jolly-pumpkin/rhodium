@@ -12,6 +12,9 @@
 export * from 'rhodium-core';
 
 // ── Capabilities (defineCapability, runtime validator, unique types) ──────
+// Note: CapabilityViolation comes from rhodium-core (via `export *` above),
+// not rhodium-capabilities. Both define structurally-compatible copies;
+// core is treated as canonical to avoid TS2308.
 export { defineCapability, createCapabilityValidator } from 'rhodium-capabilities';
 export type {
   CapabilityContract,
@@ -43,6 +46,8 @@ export type {
 } from 'rhodium-discovery';
 
 // ── Graph (dependency DAG, capability resolver) ──────────────────────────
+// All graph types (DependencyGraph, DependencyCheck, CapabilityResolver,
+// ProviderEntry) live in rhodium-core and arrive via `export *` above.
 export { createDependencyGraph, createCapabilityResolver } from 'rhodium-graph';
 
 // ── Context (pipeline, middleware, unique types) ─────────────────────────

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
@@ -10,6 +11,7 @@ import { fileURLToPath } from 'node:url';
  */
 describe('rhodium package.json exports', () => {
   const packageJsonPath = fileURLToPath(new URL('../package.json', import.meta.url));
+  const packageDir = dirname(packageJsonPath);
   const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
     exports: Record<string, unknown>;
     dependencies?: Record<string, string>;
@@ -19,8 +21,8 @@ describe('rhodium package.json exports', () => {
   it('declares the top-level entry point', () => {
     const root = exportsMap['.'] as { types: string; import: string };
     expect(root).toBeDefined();
-    expect(root.types).toMatch(/^\.\/dist\/index\.d\.ts$/);
-    expect(root.import).toMatch(/^\.\/dist\/index\.js$/);
+    expect(root.types).toBe('./dist/index.d.ts');
+    expect(root.import).toBe('./dist/index.js');
   });
 
   const subpaths = [
@@ -42,6 +44,14 @@ describe('rhodium package.json exports', () => {
     });
   }
 
+  it('exports map targets point to files that exist on disk', () => {
+    for (const [subpath, conditions] of Object.entries(exportsMap)) {
+      const { import: importPath } = conditions as { types: string; import: string };
+      const absPath = resolve(packageDir, importPath);
+      expect(existsSync(absPath)).toBe(true);
+    }
+  });
+
   it('lists every workspace sub-package as a dependency', () => {
     const deps = packageJson.dependencies ?? {};
     expect(deps['rhodium-core']).toBe('workspace:*');
@@ -51,5 +61,25 @@ describe('rhodium package.json exports', () => {
     expect(deps['rhodium-graph']).toBe('workspace:*');
     expect(deps['rhodium-context']).toBe('workspace:*');
     expect(deps['rhodium-testing']).toBe('workspace:*');
+  });
+
+  it('sub-barrel JS files do not bundle sibling packages (tree-shaking)', async () => {
+    // Each sub-barrel (e.g. dist/core.js) should only re-export from its own
+    // workspace package — not from other sub-packages. This verifies the
+    // structural foundation of tree-shaking: a consumer importing `rhodium/core`
+    // does not pull in `rhodium-testing`, `rhodium-budget`, etc.
+    const crossImportViolations: string[] = [];
+    for (const sub of subpaths) {
+      const filePath = resolve(packageDir, `dist/${sub}.js`);
+      if (!existsSync(filePath)) continue;
+      const content = readFileSync(filePath, 'utf8');
+      for (const other of subpaths) {
+        if (other === sub) continue;
+        if (content.includes(`rhodium-${other}`)) {
+          crossImportViolations.push(`dist/${sub}.js imports rhodium-${other}`);
+        }
+      }
+    }
+    expect(crossImportViolations).toEqual([]);
   });
 });

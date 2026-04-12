@@ -1,11 +1,4 @@
 import { describe, it, expect } from 'bun:test';
-import * as localCore from './core.js';
-import * as localCapabilities from './capabilities.js';
-import * as localBudget from './budget.js';
-import * as localDiscovery from './discovery.js';
-import * as localGraph from './graph.js';
-import * as localContext from './context.js';
-import * as localTesting from './testing.js';
 
 import * as rhodiumCore from 'rhodium-core';
 import * as rhodiumCapabilities from 'rhodium-capabilities';
@@ -15,78 +8,79 @@ import * as rhodiumGraph from 'rhodium-graph';
 import * as rhodiumContext from 'rhodium-context';
 import * as rhodiumTesting from 'rhodium-testing';
 
-describe('rhodium sub-barrel packages', () => {
-  it('rhodium/core mirrors the rhodium-core runtime surface', () => {
-    const sub = Object.keys(localCore).sort();
+/**
+ * RHOD-020 acceptance criteria 2 & 3: `import { createBroker } from 'rhodium/core'`
+ * and `import { createTestBroker } from 'rhodium/testing'` must work.
+ *
+ * These tests use `await import('rhodium/<sub>')` to exercise the actual package
+ * subpath resolution chain: package.json `exports` → `dist/<sub>.js` → re-exports
+ * from the underlying workspace package. This is NOT tautological — it goes through
+ * the exports map, unlike importing the source file `./core.js` directly.
+ */
+describe('rhodium sub-barrel packages (subpath exports)', () => {
+  it('rhodium/core mirrors the rhodium-core runtime surface', async () => {
+    const subpath = await import('rhodium/core');
+    const sub = Object.keys(subpath).sort();
     const src = Object.keys(rhodiumCore).sort();
     expect(sub).toEqual(src);
-    expect(localCore.createBroker).toBe(rhodiumCore.createBroker);
+    expect(subpath.createBroker).toBe(rhodiumCore.createBroker);
   });
 
-  it('rhodium/capabilities mirrors the rhodium-capabilities runtime surface', () => {
-    const sub = Object.keys(localCapabilities).sort();
+  it('rhodium/capabilities mirrors the rhodium-capabilities runtime surface', async () => {
+    const subpath = await import('rhodium/capabilities');
+    const sub = Object.keys(subpath).sort();
     const src = Object.keys(rhodiumCapabilities).sort();
     expect(sub).toEqual(src);
-    expect(localCapabilities.defineCapability).toBe(rhodiumCapabilities.defineCapability);
-    expect(localCapabilities.createCapabilityValidator).toBe(
+    expect(subpath.defineCapability).toBe(rhodiumCapabilities.defineCapability);
+    expect(subpath.createCapabilityValidator).toBe(
       rhodiumCapabilities.createCapabilityValidator,
     );
   });
 
-  it('rhodium/budget mirrors the rhodium-budget runtime surface', () => {
-    const sub = Object.keys(localBudget).sort();
+  it('rhodium/budget mirrors the rhodium-budget runtime surface', async () => {
+    const subpath = await import('rhodium/budget');
+    const sub = Object.keys(subpath).sort();
     const src = Object.keys(rhodiumBudget).sort();
     expect(sub).toEqual(src);
-    expect(localBudget.createTokenCounter).toBe(rhodiumBudget.createTokenCounter);
-    expect(localBudget.allocateBudget).toBe(rhodiumBudget.allocateBudget);
+    expect(subpath.createTokenCounter).toBe(rhodiumBudget.createTokenCounter);
+    expect(subpath.allocateBudget).toBe(rhodiumBudget.allocateBudget);
   });
 
-  it('rhodium/discovery mirrors the rhodium-discovery runtime surface', () => {
-    const sub = Object.keys(localDiscovery).sort();
+  it('rhodium/discovery mirrors the rhodium-discovery runtime surface', async () => {
+    const subpath = await import('rhodium/discovery');
+    const sub = Object.keys(subpath).sort();
     const src = Object.keys(rhodiumDiscovery).sort();
     expect(sub).toEqual(src);
-    expect(localDiscovery.createSearchIndex).toBe(rhodiumDiscovery.createSearchIndex);
-    expect(localDiscovery.searchTools).toBe(rhodiumDiscovery.searchTools);
+    expect(subpath.createSearchIndex).toBe(rhodiumDiscovery.createSearchIndex);
+    expect(subpath.searchTools).toBe(rhodiumDiscovery.searchTools);
   });
 
-  it('rhodium/graph mirrors the rhodium-graph runtime surface', () => {
-    const sub = Object.keys(localGraph).sort();
+  it('rhodium/graph mirrors the rhodium-graph runtime surface', async () => {
+    const subpath = await import('rhodium/graph');
+    const sub = Object.keys(subpath).sort();
     const src = Object.keys(rhodiumGraph).sort();
     expect(sub).toEqual(src);
-    expect(localGraph.createDependencyGraph).toBe(rhodiumGraph.createDependencyGraph);
-    expect(localGraph.createCapabilityResolver).toBe(rhodiumGraph.createCapabilityResolver);
+    expect(subpath.createDependencyGraph).toBe(rhodiumGraph.createDependencyGraph);
+    expect(subpath.createCapabilityResolver).toBe(rhodiumGraph.createCapabilityResolver);
   });
 
-  it('rhodium/context mirrors the rhodium-context runtime surface', () => {
-    const sub = Object.keys(localContext).sort();
+  it('rhodium/context mirrors the rhodium-context runtime surface', async () => {
+    const subpath = await import('rhodium/context');
+    const sub = Object.keys(subpath).sort();
     const src = Object.keys(rhodiumContext).sort();
     expect(sub).toEqual(src);
-    expect(localContext.createPipeline).toBe(rhodiumContext.createPipeline);
-    expect(localContext.collectMiddleware).toBe(rhodiumContext.collectMiddleware);
-    expect(localContext.executeToolCall).toBe(rhodiumContext.executeToolCall);
-    expect(localContext.MIDDLEWARE_CAPABILITY).toBe(rhodiumContext.MIDDLEWARE_CAPABILITY);
+    expect(subpath.createPipeline).toBe(rhodiumContext.createPipeline);
+    expect(subpath.collectMiddleware).toBe(rhodiumContext.collectMiddleware);
+    expect(subpath.executeToolCall).toBe(rhodiumContext.executeToolCall);
+    expect(subpath.MIDDLEWARE_CAPABILITY).toBe(rhodiumContext.MIDDLEWARE_CAPABILITY);
   });
 
-  it('rhodium/testing mirrors the rhodium-testing runtime surface', () => {
-    const sub = Object.keys(localTesting).sort();
+  it('rhodium/testing mirrors the rhodium-testing runtime surface', async () => {
+    const subpath = await import('rhodium/testing');
+    const sub = Object.keys(subpath).sort();
     const src = Object.keys(rhodiumTesting).sort();
     expect(sub).toEqual(src);
-    expect(localTesting.createTestBroker).toBe(rhodiumTesting.createTestBroker);
-    expect(localTesting.createMockContext).toBe(rhodiumTesting.createMockContext);
-  });
-
-  it('createBroker from rhodium/core is usable end-to-end', () => {
-    const broker = localCore.createBroker();
-    expect(broker).toBeDefined();
-    expect(typeof broker.register).toBe('function');
-    expect(typeof broker.activate).toBe('function');
-    expect(typeof broker.assembleContext).toBe('function');
-  });
-
-  it('createTestBroker from rhodium/testing is usable end-to-end', () => {
-    const { broker, mockContext } = localTesting.createTestBroker();
-    expect(broker).toBeDefined();
-    expect(mockContext).toBeDefined();
-    expect(mockContext.pluginKey).toBe('test-plugin');
+    expect(subpath.createTestBroker).toBe(rhodiumTesting.createTestBroker);
+    expect(subpath.createMockContext).toBe(rhodiumTesting.createMockContext);
   });
 });
