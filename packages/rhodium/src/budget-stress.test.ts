@@ -53,3 +53,50 @@ const safetyAssessor: Plugin = {
     };
   },
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Priority strategy under pressure
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Budget: 800 tokens. Safety assessor (priority 90) goes first and takes ~300.
+// Remaining 500 tokens fit 10 cleanup plugins (10 × 50 = 500). Last 5 are dropped.
+
+describe('priority strategy under pressure', () => {
+  let context: AssembledContext;
+  let broker: ReturnType<typeof createBroker>;
+
+  beforeAll(async () => {
+    broker = createBroker();
+    for (let i = 1; i <= 15; i++) broker.register(makeCleanupPlugin(i));
+    broker.register(safetyAssessor);
+    await broker.activate();
+    context = broker.assembleContext({
+      tokenBudget: { maxTokens: 800, allocationStrategy: 'priority' },
+    });
+  });
+
+  afterAll(async () => {
+    await broker.deactivate();
+  });
+
+  it('safety assessor tool survives', () => {
+    assertContextIncludes(context, { tools: ['assess_safety'] });
+  });
+
+  it('no critical drops', () => {
+    expect(() => assertNoCriticalDrops(context)).not.toThrow();
+  });
+
+  it('at least one low-priority cleanup plugin is dropped', () => {
+    const cleanupDrops = context.dropped.filter(d =>
+      d.pluginKey.startsWith('cleanup-rule-'),
+    );
+    expect(cleanupDrops.length).toBeGreaterThan(0);
+  });
+
+  it('all dropped plugins are non-critical (priority ≤ 80)', () => {
+    for (const d of context.dropped) {
+      expect(d.priority).toBeLessThanOrEqual(80);
+    }
+  });
+});
