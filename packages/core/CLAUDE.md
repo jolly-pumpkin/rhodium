@@ -1,12 +1,12 @@
 # Rhodium Core
 
-Central broker runtime. Implements plugin lifecycle, dependency resolution, capability matching, and context assembly orchestration.
+Central broker runtime. Implements plugin lifecycle, dependency resolution, and capability matching.
 
 ## Key Modules
 
-- `broker.ts` — Broker class, plugin registration, activation
-- `registry.ts` — Capability registry, provider lookup
-- `lifecycle.ts` — State machine (registered → resolving → active → inactive → unregistered)
+- `broker.ts` — Broker factory, plugin registration, activation, manifest introspection
+- `registry.ts` — Plugin registry, state tracking
+- `lifecycle.ts` — State machine (registered → resolving → active → inactive → unregistered), plugin context creation
 - `events.ts` — Event bus (decouples plugins)
 
 ## Performance Targets
@@ -27,7 +27,7 @@ Central broker runtime. Implements plugin lifecycle, dependency resolution, capa
 
 - Unit tests for each state transition
 - Integration tests for 3+ plugins with dependencies
-- Performance tests ensure <1ms/register, <100ms/activate targets
+- Error paths: missing dependency, capability violation, timeout, circular dependency
 
 ## Interdependencies
 

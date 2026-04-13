@@ -4,7 +4,7 @@ Test utilities for isolating plugins and broker behavior.
 
 ## Key Modules
 
-- `test-broker.ts` — Lightweight broker for tests (faster than full broker)
+- `test-broker.ts` — Lightweight broker for tests with event recording
 - `mock-context.ts` — Mock PluginContext for unit testing plugins in isolation
 
 ## Patterns
@@ -23,8 +23,8 @@ const ctx = createMockContext();
 import { createTestBroker } from 'rhodium/testing';
 
 const { broker, mockContext } = createTestBroker();
-await broker.register(pluginA);
-await broker.register(pluginB);
+broker.register(pluginA);
+broker.register(pluginB);
 await broker.activate();
 ```
 
@@ -36,12 +36,11 @@ await broker.activate();
 
 ## What TO Mock
 
-- **External I/O** — Database, HTTP, filesystems (plugins fetch async during activate, cache for sync contributeContext)
+- **External I/O** — Database, HTTP, filesystems (plugins fetch async during activate)
 - **Expensive operations** — Use test doubles for slow algorithm implementations
 
 ## Tests
 
 - Plugin isolation: each plugin tested with mock context, verifies provide/emit/resolve calls
-- Integration: 3+ plugins with dependencies, full activation, context assembly
+- Integration: 3+ plugins with dependencies, full activation
 - Error paths: missing dependency, capability violation, timeout, circular dependency
-- Performance: broker activation <100ms with 20 plugins
