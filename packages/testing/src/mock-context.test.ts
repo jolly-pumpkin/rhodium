@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { CapabilityNotFoundError } from '../../core/src/errors.js';
-import type { Plugin, ToolHandler, CommandHandler } from '../../core/src/types.js';
+import type { Plugin, CommandHandler } from '../../core/src/types.js';
 import { createMockContext } from './mock-context.js';
 
 describe('createMockContext — defaults', () => {
@@ -96,17 +96,10 @@ describe('createMockContext — provide / resolve', () => {
   });
 });
 
-describe('createMockContext — tool + command recording', () => {
-  it('registerToolHandler() populates registeredTools', () => {
-    const ctx = createMockContext();
-    const handler: ToolHandler = () => ({ content: 'ok' });
-    ctx.registerToolHandler('do-thing', handler);
-    expect(ctx.registeredTools.get('do-thing')).toBe(handler);
-  });
-
+describe('createMockContext — command recording', () => {
   it('registerCommand() populates registeredCommands', () => {
     const ctx = createMockContext();
-    const handler: CommandHandler = () => {};
+    const handler: CommandHandler = async () => {};
     ctx.registerCommand('run-cmd', handler);
     expect(ctx.registeredCommands.get('run-cmd')).toBe(handler);
   });
@@ -142,13 +135,13 @@ describe('createMockContext — end-to-end plugin isolation', () => {
       key: 'greeter',
       version: '1.0.0',
       manifest: {
+        name: 'Greeter',
+        description: 'Greets people',
         provides: [{ capability: 'greet' }],
         needs: [],
-        tools: [{ name: 'say-hi', description: 'Say hi' }],
       },
       activate(ctx) {
         ctx.provide('greet', (name: string) => `Hello, ${name}!`);
-        ctx.registerToolHandler('say-hi', () => ({ content: 'hi' }));
         ctx.emit('plugin:activated', { pluginKey: 'greeter', durationMs: 0 });
       },
     };
@@ -159,7 +152,6 @@ describe('createMockContext — end-to-end plugin isolation', () => {
     expect(ctx.providedCapabilities.has('greet')).toBe(true);
     const greet = ctx.providedCapabilities.get('greet') as (n: string) => string;
     expect(greet('world')).toBe('Hello, world!');
-    expect(ctx.registeredTools.has('say-hi')).toBe(true);
     expect(ctx.emittedEvents).toHaveLength(1);
     expect(ctx.emittedEvents[0]?.event).toBe('plugin:activated');
   });

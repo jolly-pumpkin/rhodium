@@ -4,7 +4,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * RHOD-020 acceptance: the `rhodium` package must expose all seven sub-packages
+ * RHOD-020 acceptance: the `rhodium` package must expose all sub-packages
  * as separate entry points so consumers can tree-shake imports. These tests
  * validate the shape of package.json's `exports` field, since that is what
  * Node/bun actually resolve at install time.
@@ -28,10 +28,7 @@ describe('rhodium package.json exports', () => {
   const subpaths = [
     'core',
     'capabilities',
-    'budget',
-    'discovery',
     'graph',
-    'context',
     'testing',
   ];
 
@@ -56,10 +53,7 @@ describe('rhodium package.json exports', () => {
     const deps = packageJson.dependencies ?? {};
     expect(deps['rhodium-core']).toBe('workspace:*');
     expect(deps['rhodium-capabilities']).toBe('workspace:*');
-    expect(deps['rhodium-budget']).toBe('workspace:*');
-    expect(deps['rhodium-discovery']).toBe('workspace:*');
     expect(deps['rhodium-graph']).toBe('workspace:*');
-    expect(deps['rhodium-context']).toBe('workspace:*');
     expect(deps['rhodium-testing']).toBe('workspace:*');
   });
 
@@ -67,7 +61,7 @@ describe('rhodium package.json exports', () => {
     // Each sub-barrel (e.g. dist/core.js) should only re-export from its own
     // workspace package — not from other sub-packages. This verifies the
     // structural foundation of tree-shaking: a consumer importing `rhodium/core`
-    // does not pull in `rhodium-testing`, `rhodium-budget`, etc.
+    // does not pull in `rhodium-testing`, `rhodium-graph`, etc.
     const crossImportViolations: string[] = [];
     for (const sub of subpaths) {
       const filePath = resolve(packageDir, `dist/${sub}.js`);

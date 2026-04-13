@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { createBroker, defineCapability, createCapabilityValidator } from './index.js';
-import type { Broker, Plugin, ActivationResult, AssembledContext } from './index.js';
+import type { Broker, Plugin, ActivationResult } from './index.js';
 
-// ── Capability contract ───────────────────────────────────────────────────────
+// -- Capability contract ------------------------------------------------------
 
 interface Greeter {
   greet(name: string): string;
@@ -10,48 +10,21 @@ interface Greeter {
 
 const GreeterContract = defineCapability<Greeter>('greeter');
 
-// ── Plugins ───────────────────────────────────────────────────────────────────
+// -- Plugins ------------------------------------------------------------------
 
 const englishGreeter: Plugin = {
   key: 'english-greeter',
   version: '1.0.0',
   manifest: {
+    name: 'English Greeter',
     description: 'Greets people in English',
     provides: [{ capability: 'greeter' }],
     needs: [],
-    tools: [
-      {
-        name: 'greet',
-        description: 'Greet a person by name',
-        parameters: {
-          type: 'object',
-          properties: { name: { type: 'string' } },
-          required: ['name'],
-        },
-        examples: [
-          {
-            scenario: 'Basic greeting',
-            input: { name: 'Alice' },
-            output: 'Hello, Alice!',
-          },
-        ],
-      },
-    ],
   },
   activate(ctx) {
     ctx.provide<Greeter>('greeter', {
       greet: (name: string) => `Hello, ${name}!`,
     });
-    ctx.registerToolHandler('greet', async (params) => ({
-      content: `Hello, ${params['name']}!`,
-    }));
-  },
-  contributeContext() {
-    return {
-      pluginKey: 'english-greeter',
-      priority: 50,
-      systemPromptFragment: 'You can greet people in English.',
-    };
   },
 };
 
@@ -59,32 +32,30 @@ const greetingOrchestrator: Plugin = {
   key: 'greeting-orchestrator',
   version: '1.0.0',
   manifest: {
+    name: 'Greeting Orchestrator',
+    description: 'Orchestrates greetings via commands',
     provides: [],
     needs: [{ capability: 'greeter' }],
-    tools: [],
   },
   activate(ctx) {
     const greeter = ctx.resolve<Greeter>('greeter');
-    // TODO: test command execution once broker.runCommand() is on the public API
-    ctx.registerCommand('say-hello', (args) => {
-      return greeter.greet(args[0] ?? '');
+    ctx.registerCommand('say-hello', async (...args: unknown[]) => {
+      return greeter.greet((args[0] as string) ?? '');
     });
   },
 };
 
-// ── Suite ─────────────────────────────────────────────────────────────────────
+// -- Suite --------------------------------------------------------------------
 
 describe('ARD Appendix B: Minimal Working Example', () => {
   let broker: Broker;
   let activationResult: ActivationResult;
-  let assembled: AssembledContext;
 
   beforeAll(async () => {
-    broker = createBroker({ defaultTokenBudget: { maxTokens: 4096 } });
+    broker = createBroker();
     broker.register(englishGreeter);
     broker.register(greetingOrchestrator);
     activationResult = await broker.activate();
-    assembled = broker.assembleContext({ tokenBudget: { maxTokens: 4096 } });
   });
 
   afterAll(async () => {
@@ -105,12 +76,16 @@ describe('ARD Appendix B: Minimal Working Example', () => {
     expect(violations).toEqual([]);
   });
 
-  it('assembles context with expected system prompt, tools, and examples', () => {
-    expect(assembled.systemPrompt).toContain('You can greet people in English.');
-    const greetTool = assembled.tools.find((t) => t.name === 'greet');
-    expect(greetTool).toBeDefined();
-    expect(greetTool?.examples).toHaveLength(1);
-    expect(greetTool?.examples?.[0].scenario).toBe('Basic greeting');
+  it('exposes manifests via getManifests()', () => {
+    const manifests = broker.getManifests();
+    expect(manifests.has('english-greeter')).toBe(true);
+    expect(manifests.get('english-greeter')?.name).toBe('English Greeter');
+    expect(manifests.get('english-greeter')?.description).toBe('Greets people in English');
   });
 
+  it('exposes individual manifest via getManifest()', () => {
+    const manifest = broker.getManifest('greeting-orchestrator');
+    expect(manifest).toBeDefined();
+    expect(manifest?.name).toBe('Greeting Orchestrator');
+  });
 });

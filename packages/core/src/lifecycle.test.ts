@@ -9,7 +9,6 @@ import {
   ActivationError,
   CapabilityViolationError,
   UndeclaredCapabilityError,
-  UndeclaredToolError,
 } from './errors.js';
 import { defineCapability } from '../../../packages/capabilities/src/index.js';
 import type { Plugin, PluginManifest } from './types.js';
@@ -19,9 +18,10 @@ import type { LifecycleManagerOpts } from './lifecycle.js';
 
 function makePlugin(key: string, opts: Partial<Plugin> = {}): Plugin {
   const manifest: PluginManifest = {
+    name: opts.manifest?.name ?? `${key} plugin`,
+    description: opts.manifest?.description ?? `Description for ${key}`,
     provides: opts.manifest?.provides ?? [],
     needs: opts.manifest?.needs ?? [],
-    tools: opts.manifest?.tools ?? [],
   };
   return {
     key,
@@ -29,6 +29,7 @@ function makePlugin(key: string, opts: Partial<Plugin> = {}): Plugin {
     manifest,
     activate: opts.activate,
     deactivate: opts.deactivate,
+    onDependencyRemoved: opts.onDependencyRemoved,
   };
 }
 
@@ -40,8 +41,8 @@ function makeLifecycleManager(
   const eventBus = opts.eventBus ?? createEventBus();
   const registry =
     opts.registry ??
-    new PluginRegistry((event, payload) => {
-      eventBus.emit(event, payload);
+    new PluginRegistry((payload) => {
+      eventBus.emit(payload.event, payload);
     });
 
   const manager = createLifecycleManager({
@@ -76,8 +77,8 @@ describe('lifecycle: wave computation', () => {
   it('A→B chain → 2 waves, A before B', async () => {
     const { manager, graph, registry } = makeLifecycleManager();
 
-    const a = makePlugin('a', { manifest: { provides: [{ capability: 'cap-a' }] } });
-    const b = makePlugin('b', { manifest: { needs: [{ capability: 'cap-a' }] } });
+    const a = makePlugin('a', { manifest: { name: 'A', description: 'A plugin', provides: [{ capability: 'cap-a' }], needs: [] } });
+    const b = makePlugin('b', { manifest: { name: 'B', description: 'B plugin', provides: [], needs: [{ capability: 'cap-a' }] } });
 
     [a, b].forEach((p) => registry.register(p));
     graph.addPlugin('a', ['cap-a'], []);
@@ -92,15 +93,15 @@ describe('lifecycle: wave computation', () => {
   it('diamond A→{B,C}→D → 3 waves', async () => {
     const { manager, graph, registry } = makeLifecycleManager();
 
-    const a = makePlugin('a', { manifest: { provides: [{ capability: 'cap-a' }] } });
+    const a = makePlugin('a', { manifest: { name: 'A', description: 'A plugin', provides: [{ capability: 'cap-a' }], needs: [] } });
     const b = makePlugin('b', {
-      manifest: { provides: [{ capability: 'cap-b' }], needs: [{ capability: 'cap-a' }] },
+      manifest: { name: 'B', description: 'B plugin', provides: [{ capability: 'cap-b' }], needs: [{ capability: 'cap-a' }] },
     });
     const c = makePlugin('c', {
-      manifest: { provides: [{ capability: 'cap-c' }], needs: [{ capability: 'cap-a' }] },
+      manifest: { name: 'C', description: 'C plugin', provides: [{ capability: 'cap-c' }], needs: [{ capability: 'cap-a' }] },
     });
     const d = makePlugin('d', {
-      manifest: { needs: [{ capability: 'cap-b' }, { capability: 'cap-c' }] },
+      manifest: { name: 'D', description: 'D plugin', provides: [], needs: [{ capability: 'cap-b' }, { capability: 'cap-c' }] },
     });
 
     [a, b, c, d].forEach((p) => registry.register(p));
@@ -220,13 +221,13 @@ describe('lifecycle: dependency failure handling', () => {
     const { manager, graph, registry } = makeLifecycleManager();
 
     const a = makePlugin('a', {
-      manifest: { provides: [{ capability: 'cap-a' }] },
+      manifest: { name: 'A', description: 'A plugin', provides: [{ capability: 'cap-a' }], needs: [] },
       activate: () => {
         throw new Error('a failed');
       },
     });
     const b = makePlugin('b', {
-      manifest: { needs: [{ capability: 'cap-a' }] },
+      manifest: { name: 'B', description: 'B plugin', provides: [], needs: [{ capability: 'cap-a' }] },
     });
 
     [a, b].forEach((p) => registry.register(p));
@@ -243,7 +244,7 @@ describe('lifecycle: dependency failure handling', () => {
     const { manager, graph, registry } = makeLifecycleManager();
 
     const b = makePlugin('b', {
-      manifest: { needs: [{ capability: 'missing-cap' }] },
+      manifest: { name: 'B', description: 'B plugin', provides: [], needs: [{ capability: 'missing-cap' }] },
     });
 
     registry.register(b);
@@ -259,13 +260,13 @@ describe('lifecycle: dependency failure handling', () => {
     const { manager, graph, registry } = makeLifecycleManager();
 
     const a = makePlugin('a', {
-      manifest: { provides: [{ capability: 'cap-a' }] },
+      manifest: { name: 'A', description: 'A plugin', provides: [{ capability: 'cap-a' }], needs: [] },
       activate: () => {
         throw new Error('a failed');
       },
     });
     const b = makePlugin('b', {
-      manifest: { needs: [{ capability: 'cap-a', optional: true }] },
+      manifest: { name: 'B', description: 'B plugin', provides: [], needs: [{ capability: 'cap-a', optional: true }] },
     });
 
     [a, b].forEach((p) => registry.register(p));
@@ -281,16 +282,16 @@ describe('lifecycle: dependency failure handling', () => {
     const { manager, graph, registry } = makeLifecycleManager();
 
     const a = makePlugin('a', {
-      manifest: { provides: [{ capability: 'cap-x' }] },
+      manifest: { name: 'A', description: 'A plugin', provides: [{ capability: 'cap-x' }], needs: [] },
       activate: () => {
         throw new Error('a failed');
       },
     });
     const a2 = makePlugin('a2', {
-      manifest: { provides: [{ capability: 'cap-x' }] },
+      manifest: { name: 'A2', description: 'A2 plugin', provides: [{ capability: 'cap-x' }], needs: [] },
     });
     const b = makePlugin('b', {
-      manifest: { needs: [{ capability: 'cap-x' }] },
+      manifest: { name: 'B', description: 'B plugin', provides: [], needs: [{ capability: 'cap-x' }] },
     });
 
     [a, a2, b].forEach((p) => registry.register(p));
@@ -311,13 +312,13 @@ describe('lifecycle: provide/resolve bridge', () => {
 
     let consumerImpl: unknown;
     const provider = makePlugin('provider', {
-      manifest: { provides: [{ capability: 'service' }] },
+      manifest: { name: 'Provider', description: 'Provider plugin', provides: [{ capability: 'service' }], needs: [] },
       activate: (ctx) => {
         ctx.provide('service', { method: 'hello' });
       },
     });
     const consumer = makePlugin('consumer', {
-      manifest: { needs: [{ capability: 'service' }] },
+      manifest: { name: 'Consumer', description: 'Consumer plugin', provides: [], needs: [{ capability: 'service' }] },
       activate: (ctx) => {
         consumerImpl = ctx.resolve('service');
       },
@@ -337,15 +338,15 @@ describe('lifecycle: resolveAll', () => {
     const { manager, graph, registry } = makeLifecycleManager();
 
     const p1 = makePlugin('p1', {
-      manifest: { provides: [{ capability: 'svc', priority: 1 }] },
+      manifest: { name: 'P1', description: 'P1 plugin', provides: [{ capability: 'svc', priority: 1 }], needs: [] },
       activate: (ctx) => ctx.provide('svc', { name: 'low' }),
     });
     const p2 = makePlugin('p2', {
-      manifest: { provides: [{ capability: 'svc', priority: 10 }] },
+      manifest: { name: 'P2', description: 'P2 plugin', provides: [{ capability: 'svc', priority: 10 }], needs: [] },
       activate: (ctx) => ctx.provide('svc', { name: 'high' }),
     });
     const consumer = makePlugin('consumer', {
-      manifest: { needs: [{ capability: 'svc', multiple: true }] },
+      manifest: { name: 'Consumer', description: 'Consumer plugin', provides: [], needs: [{ capability: 'svc', multiple: true }] },
       activate: (ctx) => {
         const all = ctx.resolveAll('svc');
         expect(all.length).toBe(2);
@@ -389,11 +390,11 @@ describe('lifecycle: deactivate()', () => {
     const order: string[] = [];
 
     const a = makePlugin('a', {
-      manifest: { provides: [{ capability: 'cap-a' }] },
+      manifest: { name: 'A', description: 'A plugin', provides: [{ capability: 'cap-a' }], needs: [] },
       deactivate: () => order.push('deactivate-a'),
     });
     const b = makePlugin('b', {
-      manifest: { needs: [{ capability: 'cap-a' }] },
+      manifest: { name: 'B', description: 'B plugin', provides: [], needs: [{ capability: 'cap-a' }] },
       deactivate: () => order.push('deactivate-b'),
     });
 
@@ -473,7 +474,7 @@ describe('lifecycle: activatePlugin() hot path', () => {
     const { manager, graph, registry } = makeLifecycleManager();
 
     const plugin = makePlugin('test', {
-      manifest: { needs: [{ capability: 'missing' }] },
+      manifest: { name: 'Test', description: 'Test plugin', provides: [], needs: [{ capability: 'missing' }] },
     });
 
     registry.register(plugin);
@@ -491,7 +492,7 @@ describe('lifecycle: activatePlugin() hot path', () => {
     const { manager, graph, registry } = makeLifecycleManager();
 
     const provider = makePlugin('provider', {
-      manifest: { provides: [{ capability: 'svc' }] },
+      manifest: { name: 'Provider', description: 'Provider plugin', provides: [{ capability: 'svc' }], needs: [] },
       activate: (ctx) => ctx.provide('svc', {}),
     });
 
@@ -503,7 +504,7 @@ describe('lifecycle: activatePlugin() hot path', () => {
 
     // Hot register a consumer after initial activation
     const consumer = makePlugin('consumer', {
-      manifest: { needs: [{ capability: 'svc' }] },
+      manifest: { name: 'Consumer', description: 'Consumer plugin', provides: [], needs: [{ capability: 'svc' }] },
     });
 
     registry.register(consumer);
@@ -527,7 +528,7 @@ describe('lifecycle: PluginContext.provide() manifest enforcement', () => {
     const { manager, graph, registry } = makeLifecycleManager();
 
     const plugin = makePlugin('bad-provider', {
-      manifest: { provides: [] },
+      manifest: { name: 'Bad Provider', description: 'Bad provider plugin', provides: [], needs: [] },
       activate: (ctx) => {
         ctx.provide('undeclared-cap', { value: 42 });
       },
@@ -553,7 +554,10 @@ describe('lifecycle: PluginContext.provide() manifest enforcement', () => {
 
     const plugin = makePlugin('bad-impl', {
       manifest: {
+        name: 'Bad Impl',
+        description: 'Bad implementation plugin',
         provides: [{ capability: 'greeter', contract }],
+        needs: [],
       },
       activate: (ctx) => {
         ctx.provide('greeter', { notGreet: 42 });
@@ -575,7 +579,10 @@ describe('lifecycle: PluginContext.provide() manifest enforcement', () => {
 
     const plugin = makePlugin('no-contract', {
       manifest: {
+        name: 'No Contract',
+        description: 'No contract plugin',
         provides: [{ capability: 'svc' }],
+        needs: [],
       },
       activate: (ctx) => {
         ctx.provide('svc', 'anything at all');
@@ -599,7 +606,10 @@ describe('lifecycle: PluginContext.provide() manifest enforcement', () => {
 
     const plugin = makePlugin('good-impl', {
       manifest: {
+        name: 'Good Impl',
+        description: 'Good implementation plugin',
         provides: [{ capability: 'greeter', contract }],
+        needs: [],
       },
       activate: (ctx) => {
         ctx.provide('greeter', { greet: (name: string) => `Hello, ${name}` });
@@ -615,45 +625,94 @@ describe('lifecycle: PluginContext.provide() manifest enforcement', () => {
   });
 });
 
-describe('lifecycle: PluginContext.registerToolHandler() manifest enforcement', () => {
-  it('registerToolHandler() with tool not in manifest.tools → plugin fails', async () => {
+describe('lifecycle: PluginContext.registerCommand()', () => {
+  it('registerCommand() registers a command handler during activation', async () => {
     const { manager, graph, registry } = makeLifecycleManager();
 
-    const plugin = makePlugin('bad-tool-plugin', {
-      manifest: { tools: [] },
+    const plugin = makePlugin('cmd-plugin', {
       activate: (ctx) => {
-        ctx.registerToolHandler('undeclared-tool', async () => ({ content: 'ok' }));
+        ctx.registerCommand('my-command', async (...args: unknown[]) => {
+          return `executed with ${args.length} args`;
+        });
       },
     });
 
     registry.register(plugin);
-    graph.addPlugin('bad-tool-plugin', [], []);
+    graph.addPlugin('cmd-plugin', [], []);
 
     const result = await manager.activate();
-    expect(result.failed.length).toBe(1);
-    expect(result.failed[0].pluginKey).toBe('bad-tool-plugin');
-    expect(result.failed[0].error instanceof UndeclaredToolError).toBe(true);
-    expect(result.failed[0].error.message).toContain('undeclared-tool');
-  });
-
-  it('registerToolHandler() with tool declared in manifest.tools → activates successfully', async () => {
-    const { manager, graph, registry } = makeLifecycleManager();
-
-    const plugin = makePlugin('good-tool-plugin', {
-      manifest: {
-        tools: [{ name: 'my-tool', description: 'A test tool' }],
-      },
-      activate: (ctx) => {
-        ctx.registerToolHandler('my-tool', async () => ({ content: 'ok' }));
-      },
-    });
-
-    registry.register(plugin);
-    graph.addPlugin('good-tool-plugin', [], []);
-
-    const result = await manager.activate();
-    expect(result.activated).toContain('good-tool-plugin');
+    expect(result.activated).toContain('cmd-plugin');
     expect(result.failed.length).toBe(0);
+  });
+});
+
+describe('lifecycle: PluginContext.emit()', () => {
+  it('emit() sends custom events through the event bus', async () => {
+    const { manager, graph, registry, eventBus } = makeLifecycleManager();
+
+    let receivedPayload: unknown;
+    eventBus.on('custom:event', (payload: unknown) => {
+      receivedPayload = payload;
+    });
+
+    const plugin = makePlugin('emitter', {
+      activate: (ctx) => {
+        ctx.emit('custom:event', { data: 'hello' });
+      },
+    });
+
+    registry.register(plugin);
+    graph.addPlugin('emitter', [], []);
+
+    await manager.activate();
+    expect(receivedPayload).toBeDefined();
+    expect((receivedPayload as any).detail).toEqual({ data: 'hello' });
+  });
+});
+
+describe('lifecycle: getPluginStates() returns rich PluginState', () => {
+  it('returns PluginState with status, activeCapabilities, dependencies', async () => {
+    const { manager, graph, registry } = makeLifecycleManager();
+
+    const provider = makePlugin('provider', {
+      manifest: {
+        name: 'Provider',
+        description: 'Provider plugin',
+        provides: [{ capability: 'svc' }],
+        needs: [],
+      },
+      activate: (ctx) => ctx.provide('svc', { value: 42 }),
+    });
+
+    const consumer = makePlugin('consumer', {
+      manifest: {
+        name: 'Consumer',
+        description: 'Consumer plugin',
+        provides: [],
+        needs: [{ capability: 'svc' }],
+      },
+    });
+
+    [provider, consumer].forEach((p) => registry.register(p));
+    graph.addPlugin('provider', ['svc'], []);
+    graph.addPlugin('consumer', [], ['svc']);
+
+    await manager.activate();
+
+    const states = manager.getPluginStates();
+    const providerState = states.get('provider');
+    expect(providerState).toBeDefined();
+    expect(providerState!.status).toBe('active');
+    expect(providerState!.key).toBe('provider');
+    expect(providerState!.version).toBe('1.0.0');
+    expect(providerState!.activeCapabilities).toContain('svc');
+
+    const consumerState = states.get('consumer');
+    expect(consumerState).toBeDefined();
+    expect(consumerState!.status).toBe('active');
+    expect(consumerState!.dependencies.length).toBe(1);
+    expect(consumerState!.dependencies[0].capability).toBe('svc');
+    expect(consumerState!.dependencies[0].resolved).toBe(true);
   });
 });
 

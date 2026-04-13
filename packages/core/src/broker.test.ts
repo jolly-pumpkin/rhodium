@@ -11,19 +11,18 @@ import type {
   Plugin,
   PluginManifest,
   PluginContext,
-  ContextContribution,
-  RemainingBudget,
+  BrokerEventPayload,
 } from './types.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function makePlugin(key: string, overrides: Partial<Plugin> = {}): Plugin {
   const manifest: PluginManifest = {
+    name: overrides.manifest?.name ?? `${key} plugin`,
+    description: overrides.manifest?.description ?? `Description for ${key}`,
     provides: overrides.manifest?.provides ?? [],
     needs: overrides.manifest?.needs ?? [],
-    tools: overrides.manifest?.tools ?? [],
     ...(overrides.manifest?.tags !== undefined ? { tags: overrides.manifest.tags } : {}),
-    ...(overrides.manifest?.description !== undefined ? { description: overrides.manifest.description } : {}),
   };
   const plugin: Plugin = {
     key,
@@ -31,7 +30,6 @@ function makePlugin(key: string, overrides: Partial<Plugin> = {}): Plugin {
     manifest,
     ...(overrides.activate ? { activate: overrides.activate } : {}),
     ...(overrides.deactivate ? { deactivate: overrides.deactivate } : {}),
-    ...(overrides.contributeContext ? { contributeContext: overrides.contributeContext } : {}),
     ...(overrides.onDependencyRemoved ? { onDependencyRemoved: overrides.onDependencyRemoved } : {}),
   };
   return plugin;
@@ -46,29 +44,6 @@ function makeBroker(config?: BrokerConfig): Broker {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('createBroker — config defaults', () => {
-  it('uses chars4 as the default token counter', () => {
-    const broker = makeBroker();
-    const ctx = broker.assembleContext({ tokenBudget: { maxTokens: 1000 } });
-    expect(ctx.meta.tokenCounter).toBe('chars4');
-  });
-
-  it('accepts a custom token counter function', () => {
-    const broker = makeBroker({ tokenCounter: () => 777 });
-    const p = makePlugin('p', {
-      contributeContext: () => ({
-        pluginKey: 'p',
-        priority: 50,
-        systemPromptFragment: 'hello world',
-      }),
-    });
-    broker.register(p);
-    // activate so contributeContext runs
-    return broker.activate().then(() => {
-      const ctx = broker.assembleContext({ tokenBudget: { maxTokens: 100000 } });
-      expect(ctx.totalTokens).toBe(777);
-    });
-  });
-
   it('returns an object that implements the full Broker interface', () => {
     const broker = makeBroker();
     expect(typeof broker.register).toBe('function');
@@ -79,8 +54,8 @@ describe('createBroker — config defaults', () => {
     expect(typeof broker.resolve).toBe('function');
     expect(typeof broker.resolveAll).toBe('function');
     expect(typeof broker.resolveOptional).toBe('function');
-    expect(typeof broker.searchTools).toBe('function');
-    expect(typeof broker.assembleContext).toBe('function');
+    expect(typeof broker.getManifests).toBe('function');
+    expect(typeof broker.getManifest).toBe('function');
     expect(typeof broker.on).toBe('function');
     expect(typeof broker.getLog).toBe('function');
     expect(typeof broker.getPluginStates).toBe('function');
@@ -92,23 +67,14 @@ describe('createBroker — config defaults', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('createBroker — register()', () => {
-  it('adds the plugin to registry, graph, and search index', () => {
+  it('adds the plugin to registry and graph', () => {
     const broker = makeBroker();
-    const p = makePlugin('alpha', {
-      manifest: {
-        provides: [],
-        needs: [],
-        tools: [{ name: 'search', description: 'search for things' }],
-      },
-    });
+    const p = makePlugin('alpha');
     broker.register(p);
 
-    expect(broker.getPluginStates().get('alpha')).toBe('registered');
-
-    const results = broker.searchTools('search');
-    expect(results.length).toBeGreaterThan(0);
-    expect(results[0]!.pluginKey).toBe('alpha');
-    expect(results[0]!.isPluginActivated).toBe(false);
+    const states = broker.getPluginStates();
+    expect(states.has('alpha')).toBe(true);
+    expect(states.get('alpha')!.status).toBe('registered');
   });
 
   it('throws DuplicatePluginError when the same key is registered twice', () => {
@@ -121,19 +87,18 @@ describe('createBroker — register()', () => {
     const broker = makeBroker();
     const a = makePlugin('a', {
       manifest: {
+        name: 'A',
+        description: 'A plugin',
         provides: [{ capability: 'cap-a' }],
         needs: [{ capability: 'cap-b' }],
-        tools: [{ name: 'tool-a', description: 'alpha tool' }],
       },
     });
-    // `b` has a tool so the search-index rollback assertion actually has
-    // something to miss — otherwise searchTools('unique-beta-tool') would
-    // return an empty list regardless of whether rollback occurred.
     const b = makePlugin('b', {
       manifest: {
+        name: 'B',
+        description: 'B plugin',
         provides: [{ capability: 'cap-b' }],
         needs: [{ capability: 'cap-a' }],
-        tools: [{ name: 'unique-beta-tool', description: 'only in b' }],
       },
     });
     broker.register(a);
@@ -145,31 +110,15 @@ describe('createBroker — register()', () => {
       caught = err;
     }
     expect(caught).toBeInstanceOf(CircularDependencyError);
-    // The error was thrown, which proves the cycle was detected
     const err = caught as CircularDependencyError;
-    // The error message should indicate a circular dependency
     expect(err.message).toContain('Circular dependency');
-    // The cycle property should be a non-empty array
     expect(err.cycle.length).toBeGreaterThan(0);
 
     // b must be fully cleaned up after the rollback
     expect(broker.getPluginStates().has('b')).toBe(false);
-    // Search index rollback — `b`'s unique tool name must NOT appear in any
-    // result. This only bites because `b` had a tool with a unique name;
-    // without the rollback the search index would still contain it.
-    for (const r of broker.searchTools('unique-beta-tool')) {
-      expect(r.toolName).not.toBe('unique-beta-tool');
-      expect(r.pluginKey).not.toBe('b');
-    }
-    // Generic search for 'b' also shouldn't return any b-owned results.
-    for (const r of broker.searchTools({ query: 'b' })) {
-      expect(r.pluginKey).not.toBe('b');
-    }
 
-    // `a` should still be registered and in the search index.
-    expect(broker.getPluginStates().get('a')).toBe('registered');
-    const aSearch = broker.searchTools('tool-a');
-    expect(aSearch.some((r) => r.pluginKey === 'a')).toBe(true);
+    // `a` should still be registered.
+    expect(broker.getPluginStates().get('a')!.status).toBe('registered');
   });
 });
 
@@ -188,8 +137,8 @@ describe('createBroker — activate() and deactivate()', () => {
 
     expect(result.activated.sort()).toEqual(['p1', 'p2']);
     expect(result.failed).toEqual([]);
-    expect(broker.getPluginStates().get('p1')).toBe('active');
-    expect(broker.getPluginStates().get('p2')).toBe('active');
+    expect(broker.getPluginStates().get('p1')!.status).toBe('active');
+    expect(broker.getPluginStates().get('p2')!.status).toBe('active');
     expect(log.length).toBe(2);
   });
 
@@ -197,9 +146,10 @@ describe('createBroker — activate() and deactivate()', () => {
     const broker = makeBroker();
     const provider = makePlugin('provider', {
       manifest: {
+        name: 'Provider',
+        description: 'Provider plugin',
         provides: [{ capability: 'greet' }],
         needs: [],
-        tools: [],
       },
       activate(ctx: PluginContext) {
         ctx.provide('greet', { hello: () => 'hi' });
@@ -219,35 +169,34 @@ describe('createBroker — activate() and deactivate()', () => {
     broker.register(makePlugin('x'));
 
     let fired = 0;
-    let payload: { pluginCount: number; durationMs: number } | undefined;
+    let payload: BrokerEventPayload | undefined;
     broker.on('broker:activated', (p) => {
       fired++;
       payload = p;
     });
     await broker.activate();
     expect(fired).toBe(1);
-    expect(payload?.pluginCount).toBe(1);
+    expect(payload).toBeDefined();
   });
 
   it('activatePlugin() hot-registers a plugin after broker.activate()', async () => {
     const broker = makeBroker();
-    // Initial broker.activate() with one registered plugin.
     let aCalls = 0;
     broker.register(
       makePlugin('a', { activate: () => { aCalls++; } }),
     );
     await broker.activate();
     expect(aCalls).toBe(1);
-    expect(broker.getPluginStates().get('a')).toBe('active');
+    expect(broker.getPluginStates().get('a')!.status).toBe('active');
 
-    // Hot-register a second plugin that depends on nothing and activate it.
     let bCalls = 0;
     broker.register(
       makePlugin('b', {
         manifest: {
+          name: 'B',
+          description: 'B plugin',
           provides: [{ capability: 'late-cap' }],
           needs: [],
-          tools: [],
         },
         activate(ctx: PluginContext) {
           bCalls++;
@@ -255,16 +204,25 @@ describe('createBroker — activate() and deactivate()', () => {
         },
       }),
     );
-    // Before hot activation, b is still `registered`.
-    expect(broker.getPluginStates().get('b')).toBe('registered');
+    expect(broker.getPluginStates().get('b')!.status).toBe('registered');
 
-    await broker.activatePlugin('b');
+    const result = await broker.activatePlugin('b');
     expect(bCalls).toBe(1);
-    expect(broker.getPluginStates().get('b')).toBe('active');
-    // Broker-level resolve now sees the hot-registered capability.
+    expect(result.activated).toContain('b');
+    expect(broker.getPluginStates().get('b')!.status).toBe('active');
     expect(
       broker.resolve<{ hello: () => string }>('late-cap').hello(),
     ).toBe('late');
+  });
+
+  it('activatePlugin() returns ActivationResult with durationMs', async () => {
+    const broker = makeBroker();
+    broker.register(makePlugin('x'));
+    const result = await broker.activatePlugin('x');
+    expect(result.activated).toContain('x');
+    expect(result.durationMs).toBeGreaterThanOrEqual(0);
+    expect(result.failed).toEqual([]);
+    expect(result.pending).toEqual([]);
   });
 });
 
@@ -276,7 +234,7 @@ describe('createBroker — resolve / resolveAll / resolveOptional', () => {
   it('resolve() returns the provider implementation after activation', async () => {
     const broker = makeBroker();
     const provider = makePlugin('p', {
-      manifest: { provides: [{ capability: 'cap' }], needs: [], tools: [] },
+      manifest: { name: 'P', description: 'P plugin', provides: [{ capability: 'cap' }], needs: [] },
       activate(ctx: PluginContext) {
         ctx.provide('cap', { value: 42 });
       },
@@ -289,11 +247,11 @@ describe('createBroker — resolve / resolveAll / resolveOptional', () => {
   it('resolveAll() returns providers sorted by priority descending', async () => {
     const broker = makeBroker();
     broker.register(makePlugin('low', {
-      manifest: { provides: [{ capability: 'multi', priority: 5 }], needs: [], tools: [] },
+      manifest: { name: 'Low', description: 'Low priority', provides: [{ capability: 'multi', priority: 5 }], needs: [] },
       activate(ctx: PluginContext) { ctx.provide('multi', { tag: 'low' }); },
     }));
     broker.register(makePlugin('high', {
-      manifest: { provides: [{ capability: 'multi', priority: 50 }], needs: [], tools: [] },
+      manifest: { name: 'High', description: 'High priority', provides: [{ capability: 'multi', priority: 50 }], needs: [] },
       activate(ctx: PluginContext) { ctx.provide('multi', { tag: 'high' }); },
     }));
     await broker.activate();
@@ -313,80 +271,52 @@ describe('createBroker — resolve / resolveAll / resolveOptional', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5. searchTools()
+// 5. getManifests() and getManifest()
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('createBroker — searchTools()', () => {
-  it('returns tools from registered-but-inactive plugins (manifest-first)', () => {
+describe('createBroker — getManifests() and getManifest()', () => {
+  it('getManifests() returns all registered plugin manifests', () => {
     const broker = makeBroker();
-    broker.register(makePlugin('searcher', {
-      manifest: {
-        provides: [],
-        needs: [],
-        tools: [{ name: 'find-files', description: 'find files by pattern', tags: ['io'] }],
-      },
+    broker.register(makePlugin('alpha', {
+      manifest: { name: 'Alpha', description: 'Alpha plugin', provides: [], needs: [], tags: ['core'] },
     }));
-    const results = broker.searchTools('find');
-    expect(results.length).toBeGreaterThan(0);
-    expect(results[0]!.toolName).toBe('find-files');
-    expect(results[0]!.isPluginActivated).toBe(false);
+    broker.register(makePlugin('beta', {
+      manifest: { name: 'Beta', description: 'Beta plugin', provides: [], needs: [] },
+    }));
+
+    const manifests = broker.getManifests();
+    expect(manifests.size).toBe(2);
+    expect(manifests.get('alpha')!.name).toBe('Alpha');
+    expect(manifests.get('alpha')!.description).toBe('Alpha plugin');
+    expect(manifests.get('alpha')!.tags).toEqual(['core']);
+    expect(manifests.get('beta')!.name).toBe('Beta');
   });
 
-  it('flips isPluginActivated to true after activate() and back on deactivate()', async () => {
+  it('getManifest() returns the manifest for a specific plugin', () => {
     const broker = makeBroker();
-    broker.register(makePlugin('t', {
-      manifest: {
-        provides: [],
-        needs: [],
-        tools: [{ name: 'alpha', description: 'alpha tool' }],
-      },
+    broker.register(makePlugin('alpha', {
+      manifest: { name: 'Alpha', description: 'Alpha plugin', provides: [{ capability: 'cap-a' }], needs: [] },
     }));
 
-    await broker.activate();
-    let results = broker.searchTools('alpha');
-    expect(results[0]?.isPluginActivated).toBe(true);
+    const manifest = broker.getManifest('alpha');
+    expect(manifest).toBeDefined();
+    expect(manifest!.name).toBe('Alpha');
+    expect(manifest!.provides[0]!.capability).toBe('cap-a');
+  });
 
-    await broker.deactivate();
-    results = broker.searchTools('alpha');
-    expect(results[0]?.isPluginActivated).toBe(false);
+  it('getManifest() returns undefined for an unregistered plugin', () => {
+    const broker = makeBroker();
+    expect(broker.getManifest('nonexistent')).toBeUndefined();
+  });
+
+  it('getManifests() returns empty map when no plugins registered', () => {
+    const broker = makeBroker();
+    expect(broker.getManifests().size).toBe(0);
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6. assembleContext()
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe('createBroker — assembleContext()', () => {
-  it('returns an AssembledContext including active plugin contributions', async () => {
-    const broker = makeBroker();
-    broker.register(makePlugin('p', {
-      contributeContext: (): ContextContribution => ({
-        pluginKey: 'p',
-        priority: 75,
-        systemPromptFragment: 'You are a helpful agent.',
-      }),
-    }));
-    await broker.activate();
-
-    const ctx = broker.assembleContext({ tokenBudget: { maxTokens: 1000 } });
-    expect(ctx.systemPrompt).toContain('helpful agent');
-    expect(ctx.meta.contributingPlugins).toBe(1);
-  });
-
-  it('emits context:assembled via broker.on()', async () => {
-    const broker = makeBroker();
-    broker.register(makePlugin('p'));
-    await broker.activate();
-
-    let fired = 0;
-    broker.on('context:assembled', () => { fired++; });
-    broker.assembleContext({ tokenBudget: { maxTokens: 1000 } });
-    expect(fired).toBe(1);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 7. getLog() and debug mode
+// 6. getLog() and debug mode
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('createBroker — getLog() and structured logging', () => {
@@ -403,59 +333,56 @@ describe('createBroker — getLog() and structured logging', () => {
     expect(events).toContain('broker:activated');
   });
 
-  it('filters by pluginKey', async () => {
+  it('log entries have message field', async () => {
+    const broker = makeBroker();
+    broker.register(makePlugin('foo'));
+    await broker.activate();
+
+    const log = broker.getLog();
+    for (const entry of log.entries) {
+      expect(typeof entry.message).toBe('string');
+      expect(entry.message.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('filter() returns entries for a specific event type', async () => {
+    const broker = makeBroker();
+    broker.register(makePlugin('foo'));
+    await broker.activate();
+
+    const log = broker.getLog();
+    const activated = log.filter('plugin:activated');
+    expect(activated.every((e) => e.event === 'plugin:activated')).toBe(true);
+    expect(activated.length).toBe(1);
+  });
+
+  it('forPlugin() returns entries for a specific plugin', async () => {
     const broker = makeBroker();
     broker.register(makePlugin('foo'));
     broker.register(makePlugin('bar'));
     await broker.activate();
 
-    const fooLog = broker.getLog({ pluginKey: 'foo' });
-    for (const entry of fooLog.entries) {
+    const log = broker.getLog();
+    const fooLog = log.forPlugin('foo');
+    for (const entry of fooLog) {
       expect(entry.pluginKey).toBe('foo');
     }
-    expect(fooLog.entries.length).toBeGreaterThan(0);
+    expect(fooLog.length).toBeGreaterThan(0);
   });
 
-  it('filters by event type', async () => {
+  it('pendingDependencies lists unresolved deps', () => {
     const broker = makeBroker();
-    broker.register(makePlugin('foo'));
-    await broker.activate();
+    broker.register(makePlugin('waiting', {
+      manifest: {
+        name: 'Waiting',
+        description: 'Waiting plugin',
+        provides: [],
+        needs: [{ capability: 'missing-cap' }],
+      },
+    }));
 
-    const log = broker.getLog({ event: 'plugin:activated' });
-    expect(log.entries.every((e) => e.event === 'plugin:activated')).toBe(true);
-    expect(log.entries.length).toBe(1);
-  });
-
-  it('filters by since (timestamp)', async () => {
-    const broker = makeBroker();
-    // Phase 1 — pre-cutoff events (registration). We then record a cutoff
-    // AFTER waiting long enough that Date.now() will have advanced on any
-    // platform, so the cutoff cleanly separates the two phases.
-    broker.register(makePlugin('before'));
-    await new Promise((r) => setTimeout(r, 5));
-    const cutoff = Date.now();
-    await new Promise((r) => setTimeout(r, 5));
-
-    // Phase 2 — post-cutoff events.
-    broker.register(makePlugin('after'));
-    await broker.activate();
-
-    const log = broker.getLog({ since: cutoff });
-    // The filter must return a non-empty list — otherwise a bug that returns
-    // nothing would make the per-entry assertion pass trivially.
-    expect(log.entries.length).toBeGreaterThan(0);
-    for (const entry of log.entries) {
-      expect(entry.timestamp).toBeGreaterThanOrEqual(cutoff);
-    }
-
-    // The post-cutoff registration must appear; the pre-cutoff one must not.
-    const keysAfter = new Set(
-      log.entries
-        .filter((e) => e.event === 'plugin:registered')
-        .map((e) => e.pluginKey),
-    );
-    expect(keysAfter.has('after')).toBe(true);
-    expect(keysAfter.has('before')).toBe(false);
+    const log = broker.getLog();
+    expect(log.pendingDependencies.some((d) => d.capability === 'missing-cap')).toBe(true);
   });
 
   it('returns a defensive copy of entries (mutation-safe)', () => {
@@ -466,131 +393,24 @@ describe('createBroker — getLog() and structured logging', () => {
 
     // Mutating the returned array must not affect subsequent reads.
     first.entries.length = 0;
-    first.entries.push({
-      timestamp: 0,
-      event: 'plugin:registered',
-      pluginKey: 'forged',
-    });
 
     const second = broker.getLog();
     expect(second.entries.length).toBeGreaterThan(0);
-    expect(second.entries.some((e) => e.pluginKey === 'forged')).toBe(false);
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 8. lazyActivation
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe('createBroker — lazyActivation', () => {
-  it('defers activation until assembleContext() is called (sync activate)', async () => {
-    const broker = makeBroker({ lazyActivation: true });
-    let activateCalls = 0;
-    let contributeCalls = 0;
-    const p = makePlugin('lazy', {
-      activate: () => { activateCalls++; },
-      contributeContext: (_req: unknown, _budget: RemainingBudget) => {
-        contributeCalls++;
-        return {
-          pluginKey: 'lazy',
-          priority: 50,
-          systemPromptFragment: 'lazy says hi',
-        };
-      },
-    });
-    broker.register(p);
-
-    const result = await broker.activate();
-    expect(result.activated).toEqual([]);
-    expect(activateCalls).toBe(0);
-    expect(broker.getPluginStates().get('lazy')).toBe('registered');
-
-    const ctx = broker.assembleContext({ tokenBudget: { maxTokens: 1000 } });
-    expect(activateCalls).toBe(1);
-    expect(contributeCalls).toBe(1);
-    expect(ctx.systemPrompt).toContain('lazy says hi');
-    expect(broker.getPluginStates().get('lazy')).toBe('active');
-  });
-
-  it('throws a descriptive error if a lazy plugin has an async activate()', () => {
-    const broker = makeBroker({ lazyActivation: true });
-    broker.register(makePlugin('async-lazy', {
-      activate: async () => { /* nothing */ },
-    }));
-    expect(() => broker.assembleContext({ tokenBudget: { maxTokens: 1000 } })).toThrow(
-      /lazyActivation/i,
-    );
-  });
-
-  it('respects topological order when consumer is registered before provider', () => {
-    // Regression test: `ensureLazilyActivated()` must walk plugins in
-    // dep-before-dependent order. If it iterated in registration order, the
-    // consumer's `ctx.resolve('shared')` inside activate() would fail because
-    // the provider hadn't run `ctx.provide('shared', ...)` yet.
-    const broker = makeBroker({ lazyActivation: true });
-    const callOrder: string[] = [];
-
-    // Register CONSUMER first, PROVIDER second — reversed from dep order.
-    broker.register(
-      makePlugin('consumer', {
-        manifest: {
-          provides: [],
-          needs: [{ capability: 'shared' }],
-          tools: [],
-        },
-        activate(ctx: PluginContext) {
-          callOrder.push('consumer');
-          const impl = ctx.resolve<{ value: number }>('shared');
-          expect(impl.value).toBe(42);
-        },
-      }),
-    );
-    broker.register(
-      makePlugin('provider', {
-        manifest: {
-          provides: [{ capability: 'shared' }],
-          needs: [],
-          tools: [],
-        },
-        activate(ctx: PluginContext) {
-          callOrder.push('provider');
-          ctx.provide('shared', { value: 42 });
-        },
-      }),
-    );
-
-    // Triggers lazy activation — provider must run before consumer even
-    // though consumer was registered first.
-    broker.assembleContext({ tokenBudget: { maxTokens: 1000 } });
-    expect(callOrder).toEqual(['provider', 'consumer']);
-    expect(broker.getPluginStates().get('provider')).toBe('active');
-    expect(broker.getPluginStates().get('consumer')).toBe('active');
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 9. Two-broker isolation (ADR-009)
+// 7. Two-broker isolation (ADR-009)
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('createBroker — two brokers in the same process are independent', () => {
-  it('does not share registry, graph, or search index state across brokers', () => {
+  it('does not share registry or graph state across brokers', () => {
     const brokerA = makeBroker();
     const brokerB = makeBroker();
-    brokerA.register(makePlugin('only-in-a', {
-      manifest: {
-        provides: [],
-        needs: [],
-        tools: [{ name: 'only-tool', description: 'only in a' }],
-      },
-    }));
+    brokerA.register(makePlugin('only-in-a'));
 
     expect(brokerA.getPluginStates().size).toBe(1);
     expect(brokerB.getPluginStates().size).toBe(0);
-
-    const aResults = brokerA.searchTools('only');
-    const bResults = brokerB.searchTools('only');
-    expect(aResults.length).toBeGreaterThan(0);
-    expect(bResults.length).toBe(0);
   });
 
   it('delivers events only to subscribers of the broker that emitted them', async () => {
@@ -607,7 +427,7 @@ describe('createBroker — two brokers in the same process are independent', () 
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 10. End-to-end: provider + consumer wired via a capability
+// 8. End-to-end: provider + consumer wired via a capability
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('createBroker — end-to-end provider/consumer', () => {
@@ -618,37 +438,29 @@ describe('createBroker — end-to-end provider/consumer', () => {
 
     const provider = makePlugin('provider', {
       manifest: {
+        name: 'Provider',
+        description: 'Provider plugin',
         provides: [{ capability: 'greeter' }],
         needs: [],
-        tools: [],
       },
       activate(ctx: PluginContext) {
         calls.push('provider.activate');
         ctx.provide('greeter', { greet: (name: string) => `hello, ${name}` });
       },
-      contributeContext: (): ContextContribution => ({
-        pluginKey: 'provider',
-        priority: 80,
-        systemPromptFragment: 'Provider says: I am online.',
-      }),
     });
 
     const consumer = makePlugin('consumer', {
       manifest: {
+        name: 'Consumer',
+        description: 'Consumer plugin',
         provides: [],
         needs: [{ capability: 'greeter' }],
-        tools: [],
       },
       activate(ctx: PluginContext) {
         calls.push('consumer.activate');
         const greeter = ctx.resolve<{ greet: (n: string) => string }>('greeter');
         calls.push(greeter.greet('world'));
       },
-      contributeContext: (): ContextContribution => ({
-        pluginKey: 'consumer',
-        priority: 40,
-        systemPromptFragment: 'Consumer says: I read context.',
-      }),
     });
 
     broker.register(provider);
@@ -665,30 +477,22 @@ describe('createBroker — end-to-end provider/consumer', () => {
     // broker-level resolve should reach the same implementation
     const greeter = broker.resolve<{ greet: (n: string) => string }>('greeter');
     expect(greeter.greet('broker')).toBe('hello, broker');
-
-    // assembled context should include both contributions in priority order
-    const ctx = broker.assembleContext({ tokenBudget: { maxTokens: 10_000 } });
-    expect(ctx.systemPrompt).toContain('I am online');
-    expect(ctx.systemPrompt).toContain('I read context');
-    expect(ctx.systemPrompt.indexOf('I am online')).toBeLessThan(
-      ctx.systemPrompt.indexOf('I read context'),
-    );
-    expect(ctx.meta.contributingPlugins).toBe(2);
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 11. unregister() wiring
+// 9. unregister() wiring
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('createBroker — unregister()', () => {
-  it('removes the plugin from registry, graph, resolver, and search index', async () => {
+  it('removes the plugin from registry, graph, and resolver', async () => {
     const broker = makeBroker();
     broker.register(makePlugin('temp', {
       manifest: {
+        name: 'Temp',
+        description: 'Temporary plugin',
         provides: [{ capability: 'gone' }],
         needs: [],
-        tools: [{ name: 'temp-tool', description: 'temporary tool' }],
       },
       activate(ctx: PluginContext) {
         ctx.provide('gone', { x: 1 });
@@ -701,25 +505,106 @@ describe('createBroker — unregister()', () => {
 
     expect(broker.getPluginStates().has('temp')).toBe(false);
     expect(broker.resolveOptional('gone')).toBeUndefined();
-    const results = broker.searchTools('temp-tool');
-    expect(results.find((r) => r.pluginKey === 'temp')).toBeUndefined();
   });
 
   it('calls onDependencyRemoved on dependents before teardown', async () => {
     const broker = makeBroker();
-    const removedCapabilities: string[] = [];
+    const removedCapabilities: Array<{ cap: string; provider: string }> = [];
 
     broker.register(makePlugin('provider', {
-      manifest: { provides: [{ capability: 'dep' }], needs: [], tools: [] },
+      manifest: { name: 'Provider', description: 'Provider plugin', provides: [{ capability: 'dep' }], needs: [] },
       activate(ctx: PluginContext) { ctx.provide('dep', {}); },
     }));
     broker.register(makePlugin('dependent', {
-      manifest: { provides: [], needs: [{ capability: 'dep' }], tools: [] },
-      onDependencyRemoved(cap: string) { removedCapabilities.push(cap); },
+      manifest: { name: 'Dependent', description: 'Dependent plugin', provides: [], needs: [{ capability: 'dep' }] },
+      onDependencyRemoved(cap: string, providerKey: string) {
+        removedCapabilities.push({ cap, provider: providerKey });
+      },
     }));
     await broker.activate();
 
     await broker.unregister('provider');
-    expect(removedCapabilities).toEqual(['dep']);
+    expect(removedCapabilities.length).toBe(1);
+    expect(removedCapabilities[0]!.cap).toBe('dep');
+    expect(removedCapabilities[0]!.provider).toBe('provider');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 10. Event bus — v2 event names
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('createBroker — v2 event names', () => {
+  it('emits capability:provided when a plugin provides a capability', async () => {
+    const broker = makeBroker();
+    const events: BrokerEventPayload[] = [];
+    broker.on('capability:provided', (p) => events.push(p));
+
+    broker.register(makePlugin('p', {
+      manifest: { name: 'P', description: 'P plugin', provides: [{ capability: 'svc' }], needs: [] },
+      activate(ctx: PluginContext) { ctx.provide('svc', {}); },
+    }));
+    await broker.activate();
+
+    expect(events.length).toBeGreaterThan(0);
+    expect(events[0]!.event).toBe('capability:provided');
+    expect(events[0]!.pluginKey).toBe('p');
+    expect(events[0]!.capability).toBe('svc');
+  });
+
+  it('emits capability:removed on deactivation', async () => {
+    const broker = makeBroker();
+    const events: BrokerEventPayload[] = [];
+    broker.on('capability:removed', (p) => events.push(p));
+
+    broker.register(makePlugin('p', {
+      manifest: { name: 'P', description: 'P plugin', provides: [{ capability: 'svc' }], needs: [] },
+      activate(ctx: PluginContext) { ctx.provide('svc', {}); },
+    }));
+    await broker.activate();
+    await broker.deactivate();
+
+    expect(events.length).toBeGreaterThan(0);
+    expect(events[0]!.capability).toBe('svc');
+  });
+
+  it('BrokerEventPayload has flat structure with timestamp, event, pluginKey, capability, detail', async () => {
+    const broker = makeBroker();
+    let payload: BrokerEventPayload | undefined;
+    broker.on('plugin:activated', (p) => { payload = p; });
+
+    broker.register(makePlugin('x'));
+    await broker.activate();
+
+    expect(payload).toBeDefined();
+    expect(typeof payload!.timestamp).toBe('number');
+    expect(payload!.event).toBe('plugin:activated');
+    expect(payload!.pluginKey).toBe('x');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 11. getPluginStates() returns rich PluginState
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('createBroker — getPluginStates() returns rich PluginState', () => {
+  it('returns PluginState objects with key, version, status, activeCapabilities, dependencies', async () => {
+    const broker = makeBroker();
+    broker.register(makePlugin('p', {
+      manifest: { name: 'P', description: 'P plugin', provides: [{ capability: 'cap' }], needs: [] },
+      activate(ctx: PluginContext) { ctx.provide('cap', { v: 1 }); },
+    }));
+    await broker.activate();
+
+    const states = broker.getPluginStates();
+    const state = states.get('p');
+    expect(state).toBeDefined();
+    expect(state!.key).toBe('p');
+    expect(state!.version).toBe('1.0.0');
+    expect(state!.status).toBe('active');
+    expect(state!.activeCapabilities).toContain('cap');
+    expect(typeof state!.lastTransition).toBe('number');
+    expect(Array.isArray(state!.registeredCommands)).toBe(true);
+    expect(Array.isArray(state!.dependencies)).toBe(true);
   });
 });

@@ -2,13 +2,14 @@ import { describe, it, expect } from 'bun:test';
 import type { Plugin, PluginManifest } from '../../core/src/types.js';
 import { createTestBroker } from './test-broker.js';
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// -- helpers ------------------------------------------------------------------
 
 function makePlugin(key: string, overrides: Partial<Plugin> = {}): Plugin {
   const manifest: PluginManifest = {
+    name: overrides.manifest?.name ?? key,
+    description: overrides.manifest?.description ?? `${key} plugin`,
     provides: overrides.manifest?.provides ?? [],
     needs: overrides.manifest?.needs ?? [],
-    tools: overrides.manifest?.tools ?? [],
   };
   return {
     key,
@@ -19,7 +20,7 @@ function makePlugin(key: string, overrides: Partial<Plugin> = {}): Plugin {
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 describe('createTestBroker — shape', () => {
   it('returns { broker, mockContext } with the full Broker interface', () => {
@@ -33,8 +34,8 @@ describe('createTestBroker — shape', () => {
     expect(typeof broker.resolve).toBe('function');
     expect(typeof broker.resolveAll).toBe('function');
     expect(typeof broker.resolveOptional).toBe('function');
-    expect(typeof broker.searchTools).toBe('function');
-    expect(typeof broker.assembleContext).toBe('function');
+    expect(typeof broker.getManifests).toBe('function');
+    expect(typeof broker.getManifest).toBe('function');
     expect(typeof broker.on).toBe('function');
     expect(typeof broker.getLog).toBe('function');
     expect(typeof broker.getPluginStates).toBe('function');
@@ -42,7 +43,6 @@ describe('createTestBroker — shape', () => {
     expect(mockContext.pluginKey).toBe('test-plugin');
     expect(Array.isArray(mockContext.emittedEvents)).toBe(true);
     expect(Array.isArray(mockContext.reportedErrors)).toBe(true);
-    expect(mockContext.registeredTools instanceof Map).toBe(true);
     expect(mockContext.registeredCommands instanceof Map).toBe(true);
     expect(mockContext.providedCapabilities instanceof Map).toBe(true);
   });
@@ -63,9 +63,10 @@ describe('createTestBroker — end-to-end integration', () => {
 
     const provider = makePlugin('provider', {
       manifest: {
+        name: 'Provider',
+        description: 'Provides greeter capability',
         provides: [{ capability: 'greeter' }],
         needs: [],
-        tools: [],
       },
       activate(ctx) {
         ctx.provide('greeter', providerImpl);
@@ -75,9 +76,10 @@ describe('createTestBroker — end-to-end integration', () => {
     let consumerSawImpl: unknown;
     const consumer = makePlugin('consumer', {
       manifest: {
+        name: 'Consumer',
+        description: 'Consumes greeter capability',
         provides: [],
         needs: [{ capability: 'greeter' }],
-        tools: [],
       },
       activate(ctx) {
         consumerSawImpl = ctx.resolve('greeter');
@@ -152,13 +154,6 @@ describe('createTestBroker — config overrides', () => {
 
     expect(result.failed).toHaveLength(1);
     expect(elapsed).toBeLessThan(1_000);
-  });
-
-  it('passes through tokenCounter option to the broker', () => {
-    const { broker } = createTestBroker({ tokenCounter: () => 123 });
-    const ctx = broker.assembleContext({ tokenBudget: { maxTokens: 1_000 } });
-    // The returned meta uses 'custom' for function counters (see broker.ts:85).
-    expect(ctx.meta.tokenCounter).toBe('custom');
   });
 });
 

@@ -1,26 +1,27 @@
 import { describe, it, expect, mock } from 'bun:test';
 import { PluginRegistry } from './registry.js';
-import type { Plugin, BrokerEvent, BrokerEventPayload } from './types.js';
-import { DuplicatePluginError, DuplicateToolError } from './errors.js';
+import type { Plugin, BrokerEventPayload } from './types.js';
+import { DuplicatePluginError } from './errors.js';
 
 // Minimal valid plugin — reuse across tests
-function makePlugin(key: string, tools: string[] = []): Plugin {
+function makePlugin(key: string): Plugin {
   return {
     key,
     version: '1.0.0',
     manifest: {
+      name: `${key} plugin`,
+      description: `Description for ${key}`,
       provides: [],
       needs: [],
-      tools: tools.map(name => ({ name, description: `${name} tool` })),
     },
   };
 }
 
 // Capture emitted events for assertion
 function makeEmit() {
-  const calls: Array<{ event: BrokerEvent; payload: unknown }> = [];
-  const emit = <E extends BrokerEvent>(event: E, payload: BrokerEventPayload[E]) => {
-    calls.push({ event, payload });
+  const calls: Array<BrokerEventPayload> = [];
+  const emit = (payload: BrokerEventPayload) => {
+    calls.push(payload);
   };
   return { emit, calls };
 }
@@ -45,7 +46,8 @@ describe('PluginRegistry', () => {
       registry.register(makePlugin('my-plugin'));
 
       expect(calls).toHaveLength(1);
-      expect(calls.at(0)).toEqual({ event: 'plugin:registered', payload: { pluginKey: 'my-plugin' } });
+      expect(calls[0].event).toBe('plugin:registered');
+      expect(calls[0].pluginKey).toBe('my-plugin');
     });
 
     it('throws DuplicatePluginError when key already registered', () => {
@@ -65,58 +67,13 @@ describe('PluginRegistry', () => {
       expect(() => registry.register(makePlugin('my-plugin')))
         .toThrow(/my-plugin/);
     });
-
-    it('throws DuplicateToolError when tool name conflicts with another plugin', () => {
-      const { emit } = makeEmit();
-      const registry = new PluginRegistry(emit);
-      registry.register(makePlugin('plugin-a', ['search']));
-
-      expect(() => registry.register(makePlugin('plugin-b', ['search'])))
-        .toThrow(DuplicateToolError);
-    });
-
-    it('error message includes both plugin keys and tool name', () => {
-      const { emit } = makeEmit();
-      const registry = new PluginRegistry(emit);
-      registry.register(makePlugin('plugin-a', ['search']));
-
-      const tryRegister = () => registry.register(makePlugin('plugin-b', ['search']));
-      expect(tryRegister).toThrow(/search/);
-      expect(tryRegister).toThrow(/plugin-a/);
-      expect(tryRegister).toThrow(/plugin-b/);
-    });
-
-    it('does not partially register a plugin when a later tool conflicts', () => {
-      const { emit } = makeEmit();
-      const registry = new PluginRegistry(emit);
-      registry.register(makePlugin('plugin-a', ['search']));
-
-      const pluginB: Plugin = {
-        key: 'plugin-b',
-        version: '1.0.0',
-        manifest: {
-          provides: [],
-          needs: [],
-          tools: [
-            { name: 'fetch', description: 'fetch tool' },
-            { name: 'search', description: 'search tool' },
-          ],
-        },
-      };
-
-      expect(() => registry.register(pluginB)).toThrow(DuplicateToolError);
-      expect(registry.getPlugin('plugin-b')).toBeUndefined();
-      expect(registry.getPluginStates().get('plugin-b')).toBeUndefined();
-      // 'fetch' (non-conflicting tool) must also not be in the index
-      expect(() => registry.register(makePlugin('plugin-c', ['fetch']))).not.toThrow();
-    });
   });
 
   describe('unregister()', () => {
-    it('removes the plugin and its tools from the registry', async () => {
+    it('removes the plugin from the registry', async () => {
       const { emit } = makeEmit();
       const registry = new PluginRegistry(emit);
-      registry.register(makePlugin('my-plugin', ['search']));
+      registry.register(makePlugin('my-plugin'));
 
       await registry.unregister('my-plugin');
 
@@ -131,19 +88,9 @@ describe('PluginRegistry', () => {
 
       await registry.unregister('my-plugin');
 
-      expect(calls.at(-1)).toEqual({
-        event: 'plugin:unregistered',
-        payload: { pluginKey: 'my-plugin' },
-      });
-    });
-
-    it('frees tool names for re-registration after unregister', async () => {
-      const { emit } = makeEmit();
-      const registry = new PluginRegistry(emit);
-      registry.register(makePlugin('plugin-a', ['search']));
-      await registry.unregister('plugin-a');
-
-      expect(() => registry.register(makePlugin('plugin-b', ['search']))).not.toThrow();
+      const last = calls[calls.length - 1];
+      expect(last.event).toBe('plugin:unregistered');
+      expect(last.pluginKey).toBe('my-plugin');
     });
 
     it('is idempotent — no-op for unknown key', async () => {
@@ -236,7 +183,7 @@ describe('PluginRegistry', () => {
       const { emit, calls } = makeEmit();
       const registry = new PluginRegistry(emit);
       const deactivate = mock(async () => { throw new Error('deactivate failed'); });
-      const plugin: Plugin = { ...makePlugin('my-plugin', ['search']), deactivate };
+      const plugin: Plugin = { ...makePlugin('my-plugin'), deactivate };
 
       registry.register(plugin);
       registry.setState('my-plugin', 'active');
@@ -247,9 +194,8 @@ describe('PluginRegistry', () => {
       expect(registry.getPlugin('my-plugin')).toBeUndefined();
       expect(registry.getState('my-plugin')).toBeUndefined();
       // plugin:unregistered was still emitted
-      expect(calls.at(-1)).toMatchObject({ event: 'plugin:unregistered' });
-      // tool was freed
-      expect(() => registry.register(makePlugin('plugin-b', ['search']))).not.toThrow();
+      const last = calls[calls.length - 1];
+      expect(last.event).toBe('plugin:unregistered');
     });
   });
 

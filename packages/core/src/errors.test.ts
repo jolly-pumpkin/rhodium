@@ -7,10 +7,7 @@ import {
   ActivationError,
   CapabilityViolationError,
   DuplicatePluginError,
-  DuplicateToolError,
-  ToolExecutionError,
-  BudgetExceededError,
-  ContributionTooLargeError,
+  UndeclaredCapabilityError,
 } from './errors.js';
 
 // ============================================================
@@ -64,10 +61,7 @@ describe('static CODE constants', () => {
       ActivationError.CODE,
       CapabilityViolationError.CODE,
       DuplicatePluginError.CODE,
-      DuplicateToolError.CODE,
-      ToolExecutionError.CODE,
-      BudgetExceededError.CODE,
-      ContributionTooLargeError.CODE,
+      UndeclaredCapabilityError.CODE,
     ];
     const unique = new Set(codes);
     expect(unique.size).toBe(codes.length);
@@ -97,20 +91,8 @@ describe('static CODE constants', () => {
     expect(DuplicatePluginError.CODE).toBe('DUPLICATE_PLUGIN');
   });
 
-  test('DuplicateToolError.CODE is DUPLICATE_TOOL', () => {
-    expect(DuplicateToolError.CODE).toBe('DUPLICATE_TOOL');
-  });
-
-  test('ToolExecutionError.CODE is TOOL_EXECUTION_FAILED', () => {
-    expect(ToolExecutionError.CODE).toBe('TOOL_EXECUTION_FAILED');
-  });
-
-  test('BudgetExceededError.CODE is BUDGET_EXCEEDED', () => {
-    expect(BudgetExceededError.CODE).toBe('BUDGET_EXCEEDED');
-  });
-
-  test('ContributionTooLargeError.CODE is CONTRIBUTION_TOO_LARGE', () => {
-    expect(ContributionTooLargeError.CODE).toBe('CONTRIBUTION_TOO_LARGE');
+  test('UndeclaredCapabilityError.CODE is UNDECLARED_CAPABILITY', () => {
+    expect(UndeclaredCapabilityError.CODE).toBe('UNDECLARED_CAPABILITY');
   });
 });
 
@@ -150,23 +132,8 @@ describe('instanceof RhodiumError', () => {
     expect(err instanceof RhodiumError).toBe(true);
   });
 
-  test('DuplicateToolError is instanceof RhodiumError', () => {
-    const err = new DuplicateToolError('parse', 'ts-parser', 'py-parser');
-    expect(err instanceof RhodiumError).toBe(true);
-  });
-
-  test('ToolExecutionError is instanceof RhodiumError', () => {
-    const err = new ToolExecutionError('my-plugin', 'my-tool', new Error('cause'));
-    expect(err instanceof RhodiumError).toBe(true);
-  });
-
-  test('BudgetExceededError is instanceof RhodiumError', () => {
-    const err = new BudgetExceededError('my-plugin', 500, 200);
-    expect(err instanceof RhodiumError).toBe(true);
-  });
-
-  test('ContributionTooLargeError is instanceof RhodiumError', () => {
-    const err = new ContributionTooLargeError('my-plugin', 1500, 1000);
+  test('UndeclaredCapabilityError is instanceof RhodiumError', () => {
+    const err = new UndeclaredCapabilityError('my-plugin', 'some-cap');
     expect(err instanceof RhodiumError).toBe(true);
   });
 });
@@ -384,46 +351,12 @@ describe('DuplicatePluginError', () => {
   });
 });
 
-describe('DuplicateToolError', () => {
-  test('includes tool name and both plugin keys', () => {
-    const err = new DuplicateToolError('parse', 'ts-parser', 'py-parser');
-    expect(err.message).toContain('parse');
-    expect(err.message).toContain('ts-parser');
-    expect(err.message).toContain('py-parser');
-    expect(err.code).toBe('DUPLICATE_TOOL');
-  });
-});
-
-describe('ToolExecutionError', () => {
-  test('includes plugin key, tool name, and cause', () => {
-    const cause = new Error('invalid JSON');
-    const err = new ToolExecutionError('my-plugin', 'parse', cause);
+describe('UndeclaredCapabilityError', () => {
+  test('includes plugin key and capability in message', () => {
+    const err = new UndeclaredCapabilityError('my-plugin', 'some-cap');
     expect(err.message).toContain('my-plugin');
-    expect(err.message).toContain('parse');
-    expect(err.message).toContain('invalid JSON');
+    expect(err.message).toContain('some-cap');
     expect(err.pluginKey).toBe('my-plugin');
-    expect(err.code).toBe('TOOL_EXECUTION_FAILED');
-  });
-});
-
-describe('BudgetExceededError', () => {
-  test('includes plugin key, requested, and available tokens', () => {
-    const err = new BudgetExceededError('heavy-plugin', 500, 200);
-    expect(err.message).toContain('heavy-plugin');
-    expect(err.message).toContain('500');
-    expect(err.message).toContain('200');
-    expect(err.pluginKey).toBe('heavy-plugin');
-    expect(err.code).toBe('BUDGET_EXCEEDED');
-  });
-});
-
-describe('ContributionTooLargeError', () => {
-  test('includes plugin key, tokens, and limit', () => {
-    const err = new ContributionTooLargeError('big-plugin', 1500, 1000);
-    expect(err.message).toContain('big-plugin');
-    expect(err.message).toContain('1500');
-    expect(err.message).toContain('1000');
-    expect(err.pluginKey).toBe('big-plugin');
-    expect(err.code).toBe('CONTRIBUTION_TOO_LARGE');
+    expect(err.code).toBe('UNDECLARED_CAPABILITY');
   });
 });
