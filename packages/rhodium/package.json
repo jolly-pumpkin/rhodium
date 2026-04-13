@@ -1,6 +1,6 @@
 {
   "name": "rhodium",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": false,
   "type": "module",
   "main": "./dist/index.js",
@@ -18,21 +18,9 @@
       "types": "./dist/capabilities.d.ts",
       "import": "./dist/capabilities.js"
     },
-    "./budget": {
-      "types": "./dist/budget.d.ts",
-      "import": "./dist/budget.js"
-    },
-    "./discovery": {
-      "types": "./dist/discovery.d.ts",
-      "import": "./dist/discovery.js"
-    },
     "./graph": {
       "types": "./dist/graph.d.ts",
       "import": "./dist/graph.js"
-    },
-    "./context": {
-      "types": "./dist/context.d.ts",
-      "import": "./dist/context.js"
     },
     "./testing": {
       "types": "./dist/testing.d.ts",
@@ -40,16 +28,13 @@
     }
   },
   "scripts": {
-    "build": "tsc --emitDeclarationOnly && bun build ./src/index.ts ./src/core.ts ./src/capabilities.ts ./src/budget.ts ./src/discovery.ts ./src/graph.ts ./src/context.ts ./src/testing.ts --outdir ./dist --target node --format esm",
+    "build": "tsc --emitDeclarationOnly && bun build ./src/index.ts ./src/core.ts ./src/capabilities.ts ./src/graph.ts ./src/testing.ts --outdir ./dist --target node --format esm",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "rhodium-core": "workspace:*",
     "rhodium-capabilities": "workspace:*",
-    "rhodium-budget": "workspace:*",
-    "rhodium-discovery": "workspace:*",
     "rhodium-graph": "workspace:*",
-    "rhodium-context": "workspace:*",
     "rhodium-testing": "workspace:*"
   }
 }

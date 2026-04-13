@@ -1,15 +1,8 @@
-// Cross-package imports use relative source paths to match the pattern in
-// `packages/core/src/broker.ts` (which imports graph/discovery/budget/context
-// via relative paths) and avoid requiring `rhodium-core` to be built to dist
-// before the testing package can run its own tests.
 import { CapabilityNotFoundError } from '../../core/src/errors.js';
 import type {
-  BrokerEvent,
-  BrokerEventPayload,
   CommandHandler,
   ErrorSeverity,
   PluginLogger,
-  ToolHandler,
 } from '../../core/src/types.js';
 import type { MockPluginContext } from './types.js';
 
@@ -44,16 +37,7 @@ const TEST_PLUGIN_VERSION = '0.0.0-test';
 /**
  * Create a standalone {@link MockPluginContext} for unit testing a plugin in
  * isolation. Every interaction the plugin performs on the context — `provide`,
- * `registerToolHandler`, `registerCommand`, `emit`, `reportError` — is
- * recorded for later assertion.
- *
- * @example
- * ```ts
- * const ctx = createMockContext({ resolutions: { 'llm-provider': fakeLlm } });
- * plugin.activate!(ctx);
- * expect(ctx.providedCapabilities.has('my-capability')).toBe(true);
- * expect(ctx.emittedEvents).toHaveLength(1);
- * ```
+ * `registerCommand`, `emit`, `reportError` — is recorded for later assertion.
  */
 export function createMockContext(
   options: CreateMockContextOptions = {}
@@ -65,7 +49,6 @@ export function createMockContext(
 
   const emittedEvents: Array<{ event: string; payload: unknown }> = [];
   const reportedErrors: Array<{ error: Error; severity: string }> = [];
-  const registeredTools = new Map<string, unknown>();
   const registeredCommands = new Map<string, unknown>();
   const providedCapabilities = new Map<string, unknown>();
 
@@ -74,7 +57,7 @@ export function createMockContext(
         debug: (message, data) => console.debug(`[${pluginKey}]`, message, data ?? ''),
         info: (message, data) => console.info(`[${pluginKey}]`, message, data ?? ''),
         warn: (message, data) => console.warn(`[${pluginKey}]`, message, data ?? ''),
-        error: (message, data) => console.error(`[${pluginKey}]`, message, data ?? ''),
+        error: (message, _error, data) => console.error(`[${pluginKey}]`, message, data ?? ''),
       }
     : {
         debug: () => {},
@@ -96,7 +79,6 @@ export function createMockContext(
     log,
     emittedEvents,
     reportedErrors,
-    registeredTools,
     registeredCommands,
     providedCapabilities,
 
@@ -119,7 +101,6 @@ export function createMockContext(
       const preset = (multipleResolutions[capability] ?? []) as T[];
       if (providedCapabilities.has(capability)) {
         const provided = providedCapabilities.get(capability) as T;
-        // Include provided value if not already in preset
         const hasProvided = preset.some(v => v === provided);
         return hasProvided ? preset : [provided, ...preset];
       }
@@ -140,10 +121,6 @@ export function createMockContext(
       providedCapabilities.set(capability, implementation);
     },
 
-    registerToolHandler(toolName: string, handler: ToolHandler): void {
-      registeredTools.set(toolName, handler);
-    },
-
     registerCommand(commandName: string, handler: CommandHandler): void {
       registeredCommands.set(commandName, handler);
     },
@@ -152,7 +129,7 @@ export function createMockContext(
       reportedErrors.push({ error, severity: severity ?? 'error' });
     },
 
-    emit<E extends BrokerEvent>(event: E, payload: BrokerEventPayload[E]): void {
+    emit(event: string, payload?: unknown): void {
       emittedEvents.push({ event, payload });
     },
   };

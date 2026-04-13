@@ -1,10 +1,8 @@
-import type { BrokerEvent, BrokerEventHandler, BrokerEventPayload } from './types.js';
+import type { BrokerEvent, BrokerEventHandler } from './types.js';
 
 export interface EventBus {
-  on<E extends BrokerEvent>(event: E, handler: BrokerEventHandler<E>): () => void;
-  on(event: string, handler: (payload: unknown) => void): () => void;
-  emit<E extends BrokerEvent>(event: E, payload: BrokerEventPayload[E]): void;
-  emit(event: string, payload: unknown): void;
+  on(event: BrokerEvent | string, handler: (payload: unknown) => void): () => void;
+  emit(event: BrokerEvent | string, payload: unknown): void;
 }
 
 export function createEventBus(): EventBus {
@@ -27,9 +25,8 @@ export function createEventBus(): EventBus {
       for (const handler of eventHandlers) {
         try {
           handler(payload);
-        } catch (err) {
+        } catch {
           // Silently swallow handler errors to prevent event loop corruption
-          // The broker's onUnhandledError is called only for plugin lifecycle errors
         }
       }
     },
