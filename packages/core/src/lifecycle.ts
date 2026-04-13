@@ -4,11 +4,12 @@ import {
   CapabilityNotFoundError,
   CapabilityViolationError,
   UndeclaredCapabilityError,
-  UndeclaredToolError,
+  type RhodiumError,
 } from './errors.js';
 import { createCapabilityValidator } from '../../../packages/capabilities/src/index.js';
 import type {
   ActivationResult,
+  BrokerEventPayload,
   CapabilityDeclaration,
   CapabilityResolver,
   CommandHandler,
@@ -19,7 +20,7 @@ import type {
   PluginContext,
   PluginLogger,
   PluginState,
-  ToolHandler,
+  PluginStatus,
 } from './types.js';
 import type { EventBus } from './events.js';
 import type { PluginRegistry } from './registry.js';
@@ -39,26 +40,29 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
 
   // Shared state across all activations
   const implementations = new Map<string, unknown>();
-  const toolHandlers = new Map<string, ToolHandler>();
-  const toolHandlersByPlugin = new Map<string, Set<string>>();
   const commandHandlers = new Map<string, CommandHandler>();
   const commandHandlersByPlugin = new Map<string, Set<string>>();
+  const activeCapabilitiesByPlugin = new Map<string, Set<string>>();
   let registrationIndex = 0;
   let lastActivationOrder: string[] = [];
 
-  // ── Shared resolve helpers ──────────────────────────────────────────────
-  // Extracted from createPluginContext so both the plugin-facing context and
-  // the broker-facing facade can share the same lookup path.
+  // ── Emit helper ──────────────────────────────────────────────────────────
 
-  /**
-   * Collect the set of capability names currently backed by an implementation.
-   * Drives the "Available capabilities in this broker" section of
-   * `CapabilityNotFoundError` when a lookup misses.
-   */
+  function emitEvent(event: BrokerEventPayload['event'], pluginKey?: string, extra?: { capability?: string; detail?: unknown }): void {
+    eventBus.emit(event, {
+      timestamp: Date.now(),
+      event,
+      pluginKey,
+      capability: extra?.capability,
+      detail: extra?.detail,
+    });
+  }
+
+  // ── Shared resolve helpers ──────────────────────────────────────────────
+
   function listAvailableCapabilities(): string[] {
     const set = new Set<string>();
     for (const key of implementations.keys()) {
-      // keys are `${pluginKey}:${capability}` — split on the first ':'.
       const idx = key.indexOf(':');
       if (idx >= 0) set.add(key.slice(idx + 1));
     }
@@ -70,11 +74,6 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
     neededBy: string,
     neededByVersion: string,
   ): T {
-    // Pass `optional: true` so the resolver returns undefined instead of
-    // throwing its own CapabilityNotFoundError. We then throw the local class
-    // directly — this keeps the error observable as an instance of the local
-    // `CapabilityNotFoundError`, regardless of whether the resolver came from
-    // a bundled dist copy or source.
     const entry = resolver.resolve(
       { capability, optional: true },
       neededBy,
@@ -140,15 +139,13 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       },
 
       provide<T>(capability: string, implementation: T): void {
-        // Find priority and variant from manifest.provides
         const decl = plugin.manifest.provides.find((p) => p.capability === capability);
 
-        // Criterion 2: throw if not declared in manifest
         if (!decl) {
           throw new UndeclaredCapabilityError(pluginKey, capability);
         }
 
-        // Criterion 3: validate against contract schema if declared
+        // Validate against contract schema if declared
         if (decl.contract) {
           const violations = createCapabilityValidator().validate(decl.contract, implementation);
           if (violations.length > 0) {
@@ -162,20 +159,16 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
         const providerDecl: CapabilityDeclaration = { capability, priority, variant };
         resolver.registerProvider(pluginKey, providerDecl, registrationIndex++);
         implementations.set(`${pluginKey}:${capability}`, implementation);
-      },
 
-      registerToolHandler(toolName: string, handler: ToolHandler): void {
-        // Criterion 4: throw if tool not declared in manifest
-        if (!plugin.manifest.tools.some((t) => t.name === toolName)) {
-          throw new UndeclaredToolError(pluginKey, toolName);
+        // Track active capabilities per plugin
+        let caps = activeCapabilitiesByPlugin.get(pluginKey);
+        if (!caps) {
+          caps = new Set();
+          activeCapabilitiesByPlugin.set(pluginKey, caps);
         }
-        toolHandlers.set(toolName, handler);
-        let owned = toolHandlersByPlugin.get(pluginKey);
-        if (!owned) {
-          owned = new Set();
-          toolHandlersByPlugin.set(pluginKey, owned);
-        }
-        owned.add(toolName);
+        caps.add(capability);
+
+        emitEvent('capability:provided', pluginKey, { capability });
       },
 
       registerCommand(commandName: string, handler: CommandHandler): void {
@@ -189,11 +182,15 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       },
 
       reportError(error: Error, severity?: ErrorSeverity): void {
-        eventBus.emit('plugin:error', { pluginKey, error, severity: severity ?? 'error' });
+        emitEvent('plugin:error', pluginKey, { detail: { error, severity: severity ?? 'error' } });
       },
 
-      emit(event, payload) {
-        eventBus.emit(event, payload);
+      emit(event: string, payload?: unknown): void {
+        eventBus.emit(event, {
+          timestamp: Date.now(),
+          event,
+          detail: payload,
+        });
       },
     };
   }
@@ -204,7 +201,7 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       debug: (message, data) => console.debug(prefix, message, data ?? ''),
       info: (message, data) => console.info(prefix, message, data ?? ''),
       warn: (message, data) => console.warn(prefix, message, data ?? ''),
-      error: (message, data) => console.error(prefix, message, data ?? ''),
+      error: (message, _error, data) => console.error(prefix, message, data ?? ''),
     };
   }
 
@@ -216,10 +213,7 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       let myWave = 0;
 
       for (const check of checks) {
-        if (check.availableProviders.length === 0) {
-          // No providers for this capability yet
-          continue;
-        }
+        if (check.availableProviders.length === 0) continue;
         const providerWaves = check.availableProviders
           .filter((p) => waveOf.has(p))
           .map((p) => waveOf.get(p)!);
@@ -231,7 +225,6 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       waveOf.set(pluginKey, myWave);
     }
 
-    // Group by wave number
     const waves: string[][] = [];
     for (const pluginKey of order) {
       const w = waveOf.get(pluginKey)!;
@@ -255,11 +248,11 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       const check = checks.find((c) => c.capability === dep.capability);
 
       if (!check || check.availableProviders.length === 0) {
-        return true; // required dependency has no providers
+        return true;
       }
 
       if (check.availableProviders.every((p) => failedSet.has(p))) {
-        return true; // all providers of a required dep failed
+        return true;
       }
     }
 
@@ -290,14 +283,14 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
   async function activateSingle(
     pluginKey: string,
     activated: string[],
-    failed: Array<{ pluginKey: string; error: Error }>,
+    failed: Array<{ pluginKey: string; error: RhodiumError }>,
     failedSet: Set<string>
   ): Promise<void> {
     const plugin = registry.getPlugin(pluginKey);
     if (!plugin) return;
 
     registry.setState(pluginKey, 'resolving');
-    eventBus.emit('plugin:activating', { pluginKey });
+    emitEvent('plugin:activating', pluginKey);
 
     const start = Date.now();
     const ctx = createPluginContext(pluginKey, plugin);
@@ -319,7 +312,7 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
 
       registry.setState(pluginKey, 'active');
       const durationMs = Date.now() - start;
-      eventBus.emit('plugin:activated', { pluginKey, durationMs });
+      emitEvent('plugin:activated', pluginKey, { detail: { durationMs } });
       activated.push(pluginKey);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
@@ -328,26 +321,60 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
         error instanceof ActivationError ||
         error instanceof CapabilityNotFoundError ||
         error instanceof UndeclaredCapabilityError ||
-        error instanceof UndeclaredToolError ||
         error instanceof CapabilityViolationError
-          ? error
+          ? (error as RhodiumError)
           : new ActivationError(pluginKey, error);
 
       registry.setState(pluginKey, 'failed');
       failedSet.add(pluginKey);
       failed.push({ pluginKey, error: wrappedError });
-      eventBus.emit('plugin:failed', { pluginKey, error: wrappedError });
+      emitEvent('plugin:error', pluginKey, { detail: { error: wrappedError } });
       onUnhandledError?.(wrappedError);
 
       throw wrappedError;
     }
   }
 
+  /** Build a rich PluginState for a given plugin. */
+  function buildPluginState(pluginKey: string): PluginState | undefined {
+    const plugin = registry.getPlugin(pluginKey);
+    const status = registry.getState(pluginKey);
+    if (!plugin || !status) return undefined;
+
+    const caps = activeCapabilitiesByPlugin.get(pluginKey);
+    const cmds = commandHandlersByPlugin.get(pluginKey);
+
+    const deps: PluginState['dependencies'] = plugin.manifest.needs.map((dep) => {
+      const entry = resolver.resolve(
+        { capability: dep.capability, optional: true, variant: dep.variant },
+        pluginKey,
+        plugin.version,
+      );
+      return {
+        capability: dep.capability,
+        optional: dep.optional ?? false,
+        resolved: entry !== undefined,
+        providerKey: entry?.pluginKey,
+      };
+    });
+
+    return {
+      key: pluginKey,
+      version: plugin.version,
+      status,
+      activeCapabilities: caps ? [...caps] : [],
+      registeredCommands: cmds ? [...cmds] : [],
+      dependencies: deps,
+      lastTransition: Date.now(),
+      error: undefined, // TODO: track per-plugin error
+    };
+  }
+
   return {
     async activate(): Promise<ActivationResult> {
       const start = Date.now();
       const activated: string[] = [];
-      const failed: Array<{ pluginKey: string; error: Error }> = [];
+      const failed: Array<{ pluginKey: string; error: RhodiumError }> = [];
       const pending: Array<{ pluginKey: string; unmetDependencies: string[] }> = [];
       const failedSet = new Set<string>();
 
@@ -372,14 +399,13 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
         for (let i = 0; i < results.length; i++) {
           const result = results[i];
           if (result && result.status === 'rejected') {
-            // Error already recorded in activateSingle
             failedSet.add(toActivate[i]);
           }
         }
       }
 
       const durationMs = Date.now() - start;
-      eventBus.emit('broker:activated', { pluginCount: activated.length, durationMs });
+      emitEvent('broker:activated', undefined, { detail: { pluginCount: activated.length, durationMs } });
 
       return { activated, failed, pending, durationMs };
     },
@@ -391,7 +417,7 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       let count = 0;
       for (const pluginKey of activeKeys) {
         const plugin = registry.getPlugin(pluginKey);
-        eventBus.emit('plugin:deactivating', { pluginKey });
+        emitEvent('plugin:deactivating', pluginKey);
 
         try {
           await plugin?.deactivate?.();
@@ -402,21 +428,32 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
         registry.setState(pluginKey, 'inactive');
         resolver.unregisterPlugin(pluginKey);
 
-        // Remove implementations for this plugin
-        for (const [key] of implementations) {
-          if (key.startsWith(`${pluginKey}:`)) {
-            implementations.delete(key);
+        // Remove implementations and emit capability:removed for each
+        const caps = activeCapabilitiesByPlugin.get(pluginKey);
+        if (caps) {
+          for (const capability of caps) {
+            implementations.delete(`${pluginKey}:${capability}`);
+            emitEvent('capability:removed', pluginKey, { capability });
           }
+          activeCapabilitiesByPlugin.delete(pluginKey);
         }
 
-        eventBus.emit('plugin:deactivated', { pluginKey });
+        // Remove command handlers
+        const ownedCommands = commandHandlersByPlugin.get(pluginKey);
+        if (ownedCommands) {
+          for (const cmd of ownedCommands) commandHandlers.delete(cmd);
+          commandHandlersByPlugin.delete(pluginKey);
+        }
+
+        emitEvent('plugin:deactivated', pluginKey);
         count++;
       }
 
-      eventBus.emit('broker:deactivated', { pluginCount: count });
+      emitEvent('broker:deactivated', undefined, { detail: { pluginCount: count } });
     },
 
-    async activatePlugin(pluginKey: string): Promise<void> {
+    async activatePlugin(pluginKey: string): Promise<ActivationResult> {
+      const start = Date.now();
       const plugin = registry.getPlugin(pluginKey);
       if (!plugin) {
         throw new Error(`Plugin '${pluginKey}' not registered`);
@@ -424,7 +461,7 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
 
       const state = registry.getState(pluginKey);
       if (state === 'active') {
-        return; // idempotent
+        return { activated: [pluginKey], failed: [], pending: [], durationMs: 0 };
       }
 
       // Register plugin in graph for consistent ordering (hot registration)
@@ -435,92 +472,44 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       // Check that all required deps are satisfied
       for (const dep of plugin.manifest.needs) {
         if (dep.optional) continue;
-        resolver.resolve(dep as DependencyDeclaration, pluginKey, plugin.version); // throws CapabilityNotFoundError if missing
+        resolver.resolve(dep as DependencyDeclaration, pluginKey, plugin.version);
       }
 
       const activated: string[] = [];
-      const failed: Array<{ pluginKey: string; error: Error }> = [];
+      const failed: Array<{ pluginKey: string; error: RhodiumError }> = [];
       const failedSet = new Set<string>();
 
-      // activateSingle will throw if plugin activation fails. If successful, activated array
-      // will be populated. The failed array is provided for consistency with the main activate()
-      // flow but is not used in hot registration since any error will re-throw.
       await activateSingle(pluginKey, activated, failed, failedSet);
 
-      // Add to lastActivationOrder for deactivate()
       if (!lastActivationOrder.includes(pluginKey)) {
         lastActivationOrder.push(pluginKey);
       }
-    },
 
-    /**
-     * Synchronously activate a single plugin. Used by the broker's
-     * `lazyActivation` path, where `assembleContext()` is synchronous by
-     * contract and therefore cannot await a plugin's `activate()` return
-     * value. If the plugin's `activate()` returns a Promise, this throws.
-     */
-    activatePluginSync(pluginKey: string): void {
-      const plugin = registry.getPlugin(pluginKey);
-      if (!plugin) {
-        throw new Error(`Plugin '${pluginKey}' not registered`);
-      }
-      if (registry.getState(pluginKey) === 'active') return; // idempotent
-
-      registry.setState(pluginKey, 'resolving');
-      eventBus.emit('plugin:activating', { pluginKey });
-
-      const start = Date.now();
-      const ctx = createPluginContext(pluginKey, plugin);
-      try {
-        const result = plugin.activate ? plugin.activate(ctx) : undefined;
-        if (result && typeof (result as Promise<unknown>).then === 'function') {
-          throw new Error(
-            `lazyActivation requires plugin.activate() to be synchronous; '${pluginKey}' returned a Promise`
-          );
-        }
-      } catch (err) {
-        const error = err instanceof Error ? err : new Error(String(err));
-        const wrappedError =
-          error instanceof ActivationError ||
-          error instanceof CapabilityNotFoundError ||
-          error instanceof UndeclaredCapabilityError ||
-          error instanceof UndeclaredToolError ||
-          error instanceof CapabilityViolationError
-            ? error
-            : new ActivationError(pluginKey, error);
-
-        registry.setState(pluginKey, 'failed');
-        eventBus.emit('plugin:failed', { pluginKey, error: wrappedError });
-        onUnhandledError?.(wrappedError);
-        throw wrappedError;
-      }
-
-      registry.setState(pluginKey, 'active');
       const durationMs = Date.now() - start;
-      eventBus.emit('plugin:activated', { pluginKey, durationMs });
-
-      if (!lastActivationOrder.includes(pluginKey)) {
-        lastActivationOrder.push(pluginKey);
-      }
+      return { activated, failed, pending: [], durationMs };
     },
 
     /**
      * Drain all lifecycle-owned state for a plugin: implementations,
-     * tool handlers, command handlers. Used by the broker's `unregister()`.
-     * This is a targeted cleanup — the caller is responsible for updating
-     * registry/graph/resolver/search-index state.
+     * command handlers. Used by the broker's `unregister()`.
      */
     purgePlugin(pluginKey: string): void {
+      const caps = activeCapabilitiesByPlugin.get(pluginKey);
+      if (caps) {
+        for (const capability of caps) {
+          implementations.delete(`${pluginKey}:${capability}`);
+          emitEvent('capability:removed', pluginKey, { capability });
+        }
+        activeCapabilitiesByPlugin.delete(pluginKey);
+      }
+
+      // Also clean up any remaining implementations
       for (const key of Array.from(implementations.keys())) {
         if (key.startsWith(`${pluginKey}:`)) {
           implementations.delete(key);
         }
       }
-      const ownedTools = toolHandlersByPlugin.get(pluginKey);
-      if (ownedTools) {
-        for (const toolName of ownedTools) toolHandlers.delete(toolName);
-        toolHandlersByPlugin.delete(pluginKey);
-      }
+
       const ownedCommands = commandHandlersByPlugin.get(pluginKey);
       if (ownedCommands) {
         for (const cmd of ownedCommands) commandHandlers.delete(cmd);
@@ -528,7 +517,17 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       }
     },
 
-    /** Broker-level capability resolution. Reuses the plugin-context path. */
+    /** Build rich PluginState objects for all plugins. */
+    getPluginStates(): Map<string, PluginState> {
+      const result = new Map<string, PluginState>();
+      for (const plugin of registry.getAllPlugins()) {
+        const state = buildPluginState(plugin.key);
+        if (state) result.set(plugin.key, state);
+      }
+      return result;
+    },
+
+    /** Broker-level capability resolution. */
     resolve: resolveImpl,
     resolveAll: resolveAllImpl,
     resolveOptional: resolveOptionalImpl,
