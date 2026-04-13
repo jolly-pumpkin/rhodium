@@ -43,6 +43,8 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
   const commandHandlers = new Map<string, CommandHandler>();
   const commandHandlersByPlugin = new Map<string, Set<string>>();
   const activeCapabilitiesByPlugin = new Map<string, Set<string>>();
+  const lastTransitionTimes = new Map<string, number>();
+  const pluginErrors = new Map<string, RhodiumError>();
   let registrationIndex = 0;
   let lastActivationOrder: string[] = [];
 
@@ -290,6 +292,7 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
     if (!plugin) return;
 
     registry.setState(pluginKey, 'resolving');
+    lastTransitionTimes.set(pluginKey, Date.now());
     emitEvent('plugin:activating', pluginKey);
 
     const start = Date.now();
@@ -314,6 +317,8 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       }
 
       registry.setState(pluginKey, 'active');
+      lastTransitionTimes.set(pluginKey, Date.now());
+      pluginErrors.delete(pluginKey);
       const durationMs = Date.now() - start;
       emitEvent('plugin:activated', pluginKey, { detail: { durationMs } });
       activated.push(pluginKey);
@@ -341,6 +346,8 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
           : new ActivationError(pluginKey, error);
 
       registry.setState(pluginKey, 'failed');
+      lastTransitionTimes.set(pluginKey, Date.now());
+      pluginErrors.set(pluginKey, wrappedError);
       failedSet.add(pluginKey);
       failed.push({ pluginKey, error: wrappedError });
       emitEvent('plugin:error', pluginKey, { detail: { error: wrappedError } });
@@ -380,8 +387,8 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       activeCapabilities: caps ? [...caps] : [],
       registeredCommands: cmds ? [...cmds] : [],
       dependencies: deps,
-      lastTransition: Date.now(),
-      error: undefined, // TODO: track per-plugin error
+      lastTransition: lastTransitionTimes.get(pluginKey) ?? Date.now(),
+      error: pluginErrors.get(pluginKey),
     };
   }
 
@@ -441,6 +448,7 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
         }
 
         registry.setState(pluginKey, 'inactive');
+        lastTransitionTimes.set(pluginKey, Date.now());
         resolver.unregisterPlugin(pluginKey);
 
         // Remove implementations and emit capability:removed for each
@@ -492,6 +500,7 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
         }
       } catch (err) {
         registry.setState(pluginKey, 'failed');
+        lastTransitionTimes.set(pluginKey, Date.now());
         throw err;
       }
 
@@ -535,6 +544,9 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
         for (const cmd of ownedCommands) commandHandlers.delete(cmd);
         commandHandlersByPlugin.delete(pluginKey);
       }
+
+      lastTransitionTimes.delete(pluginKey);
+      pluginErrors.delete(pluginKey);
     },
 
     /** Build rich PluginState objects for all plugins. */

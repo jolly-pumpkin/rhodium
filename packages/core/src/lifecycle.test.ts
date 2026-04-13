@@ -736,6 +736,54 @@ describe('lifecycle: getPluginStates() returns rich PluginState', () => {
   });
 });
 
+describe('lifecycle: PluginState.lastTransition tracking', () => {
+  it('lastTransition is stable across multiple reads (not recomputed)', async () => {
+    const { manager, graph, registry } = makeLifecycleManager();
+    const plugin = makePlugin('test');
+    registry.register(plugin);
+    graph.addPlugin('test', [], []);
+
+    await manager.activate();
+
+    const t1 = manager.getPluginStates().get('test')!.lastTransition;
+    await new Promise((r) => setTimeout(r, 20));
+    const t2 = manager.getPluginStates().get('test')!.lastTransition;
+
+    expect(t1).toBe(t2);
+  });
+});
+
+describe('lifecycle: PluginState.error tracking', () => {
+  it('error is populated when activation fails', async () => {
+    const { manager, graph, registry } = makeLifecycleManager();
+    const plugin = makePlugin('fail', {
+      activate: () => { throw new Error('boom'); },
+    });
+    registry.register(plugin);
+    graph.addPlugin('fail', [], []);
+
+    await manager.activate();
+
+    const state = manager.getPluginStates().get('fail');
+    expect(state).toBeDefined();
+    expect(state!.status).toBe('failed');
+    expect(state!.error).toBeDefined();
+    expect(state!.error!.message).toContain('boom');
+  });
+
+  it('error is undefined for successfully activated plugins', async () => {
+    const { manager, graph, registry } = makeLifecycleManager();
+    const plugin = makePlugin('ok');
+    registry.register(plugin);
+    graph.addPlugin('ok', [], []);
+
+    await manager.activate();
+
+    const state = manager.getPluginStates().get('ok');
+    expect(state!.error).toBeUndefined();
+  });
+});
+
 describe('lifecycle: performance', () => {
   it('20 plugins with no-op hooks → durationMs < 100', async () => {
     const { manager, graph, registry } = makeLifecycleManager();
