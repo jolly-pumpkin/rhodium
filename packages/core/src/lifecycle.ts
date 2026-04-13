@@ -204,7 +204,7 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       debug: (message, data) => console.debug(prefix, message, data ?? ''),
       info: (message, data) => console.info(prefix, message, data ?? ''),
       warn: (message, data) => console.warn(prefix, message, data ?? ''),
-      error: (message, error, data) => console.error(prefix, message, ...(error ? [error] : []), data ?? ''),
+      error: (message, error, data) => console.error(prefix, message, ...(error ? [error] : []), ...(data ? [data] : [])),
     };
   }
 

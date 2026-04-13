@@ -122,33 +122,26 @@ export function createBroker(config: BrokerConfig = {}): Broker {
         const providedCaps = plugin.manifest.provides.map((p) => p.capability);
         for (const depKey of dependents) {
           const dep = registry.getPlugin(depKey);
-          if (!dep?.onDependencyRemoved) continue;
-          for (const cap of providedCaps) {
-            try {
-              dep.onDependencyRemoved(cap, pluginKey);
-            } catch (err) {
-              config.onUnhandledError?.(
-                err instanceof Error ? err : new Error(String(err)),
-              );
-            }
-          }
-        }
-      }
-      // Emit dependency:unresolved for dependents that lose a needed capability
-      if (plugin) {
-        const dependents = graph.getDependents(pluginKey);
-        const providedCaps = plugin.manifest.provides.map((p) => p.capability);
-        for (const depKey of dependents) {
-          const dep = registry.getPlugin(depKey);
           if (!dep) continue;
           for (const cap of providedCaps) {
+            // Notify plugin via callback
+            if (dep.onDependencyRemoved) {
+              try {
+                dep.onDependencyRemoved(cap, pluginKey);
+              } catch (err) {
+                config.onUnhandledError?.(
+                  err instanceof Error ? err : new Error(String(err)),
+                );
+              }
+            }
+            // Emit dependency:unresolved event
             if (dep.manifest.needs.some((n) => n.capability === cap)) {
               eventBus.emit('dependency:unresolved', {
                 timestamp: Date.now(),
-                event: 'dependency:unresolved' as BrokerEvent,
+                event: 'dependency:unresolved',
                 pluginKey: depKey,
                 capability: cap,
-              });
+              } satisfies BrokerEventPayload);
             }
           }
         }
