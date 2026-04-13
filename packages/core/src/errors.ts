@@ -201,18 +201,6 @@ export class UndeclaredCapabilityError extends RhodiumError {
   }
 }
 
-export class UndeclaredToolError extends RhodiumError {
-  static readonly CODE = 'UNDECLARED_TOOL';
-
-  constructor(pluginKey: string, toolName: string) {
-    super(
-      `Plugin '${pluginKey}' called registerToolHandler('${toolName}') but '${toolName}' is not declared in manifest.tools`,
-      UndeclaredToolError.CODE,
-      pluginKey
-    );
-  }
-}
-
 // ============================================================
 // Registration errors
 // ============================================================
@@ -224,59 +212,6 @@ export class DuplicatePluginError extends RhodiumError {
     super(
       `Plugin '${pluginKey}' is already registered`,
       DuplicatePluginError.CODE,
-      pluginKey
-    );
-  }
-}
-
-export class DuplicateToolError extends RhodiumError {
-  static readonly CODE = 'DUPLICATE_TOOL';
-
-  constructor(toolName: string, existingPluginKey: string, conflictingPluginKey: string) {
-    super(
-      `Tool name '${toolName}' is already registered\n\n  Existing:  ${existingPluginKey} declares '${toolName}'\n  Conflict:  ${conflictingPluginKey} also declares '${toolName}'`,
-      DuplicateToolError.CODE
-    );
-  }
-}
-
-// ============================================================
-// Runtime errors
-// ============================================================
-
-export class ToolExecutionError extends RhodiumError {
-  static readonly CODE = 'TOOL_EXECUTION_FAILED';
-  readonly cause: Error;
-
-  constructor(pluginKey: string, toolName: string, cause: Error) {
-    super(
-      `Tool '${toolName}' in plugin '${pluginKey}' failed: ${cause.message}`,
-      ToolExecutionError.CODE,
-      pluginKey
-    );
-    this.cause = cause;
-  }
-}
-
-export class BudgetExceededError extends RhodiumError {
-  static readonly CODE = 'BUDGET_EXCEEDED';
-
-  constructor(pluginKey: string, requested: number, available: number) {
-    super(
-      `Plugin '${pluginKey}' requested ${requested} tokens but only ${available} are available`,
-      BudgetExceededError.CODE,
-      pluginKey
-    );
-  }
-}
-
-export class ContributionTooLargeError extends RhodiumError {
-  static readonly CODE = 'CONTRIBUTION_TOO_LARGE';
-
-  constructor(pluginKey: string, tokens: number, limit: number) {
-    super(
-      `Plugin '${pluginKey}' contribution of ${tokens} tokens exceeds the limit of ${limit}`,
-      ContributionTooLargeError.CODE,
       pluginKey
     );
   }
