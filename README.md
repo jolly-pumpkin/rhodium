@@ -4,11 +4,26 @@ TypeScript framework for composing capability-driven systems from plugins. The b
 
 ## What This Is
 
-A ~5KB TypeScript library. A broker that wires plugins together via typed capability contracts.
+A ~5KB TypeScript library for composing software systems from independently deployable plugins with typed capability contracts. The broker wires them together at runtime, similar to how Kubernetes reconciles infrastructure state across pods and services.
 
-**Not:** An LLM wrapper, an agent framework, a deployment platform, or any PoC application built on top of it. Model calls happen in plugins — never in core.
+**Is:** A broker that resolves typed `provides`/`needs` contracts. A token budget manager for LLM context. A manifest-first tool discovery system.
+
+**Not:** An LLM wrapper, an agent framework, a deployment platform, or any PoC application built on it. Model calls happen in plugins — never in core.
+
+## Design Philosophy
+
+- **Composition over coupling** — Plugins declare what they provide and need. The broker resolves wiring. No plugin references another directly.
+- **Interfaces over implementations** — Swap the model provider, tool set, or memory backend without touching anything that depends on them.
+- **Declarative over imperative** — Declare the capability graph; let the broker reconcile it.
+- **Isolation over propagation** — A failing plugin fails loudly and locally. It doesn't corrupt downstream behavior.
+- **Context as a managed resource** — When plugins participate in LLM inference, token budget is finite and precious. The framework manages it like an OS manages memory.
+- **Manifest-first** — The broker knows what every plugin offers by reading its manifest. Code runs only when needed.
 
 ## Install
+
+```bash
+bun add rhodium
+```
 
 ```bash
 bun add rhodium
@@ -17,30 +32,63 @@ bun add rhodium
 ## Quick Start
 
 ```typescript
-import { createBroker, defineCapability } from 'rhodium';
+import { createBroker } from 'rhodium';
 
 const broker = createBroker();
 
-const myPlugin = {
-  key: 'my-plugin',
+// Plugin 1: Provides a logger
+const loggerPlugin = {
+  key: 'logger',
   version: '1.0.0',
   manifest: {
-    provides: [{ capability: 'greeter' }],
+    provides: [{ capability: 'logger', priority: 100 }],
     needs: [],
     tools: [],
   },
   activate(ctx) {
-    ctx.provide('greeter', {
-      greet: (name: string) => `Hello, ${name}!`,
+    ctx.provide('logger', {
+      info: (msg: string) => console.log(`[INFO] ${msg}`),
+      error: (msg: string, err?: Error) => console.error(`[ERROR] ${msg}`, err),
     });
   },
 };
 
-broker.register(myPlugin);
-await broker.activate();
+// Plugin 2: Depends on logger, provides a greeter
+const greeterPlugin = {
+  key: 'greeter',
+  version: '1.0.0',
+  manifest: {
+    provides: [{ capability: 'greeter' }],
+    needs: [{ capability: 'logger' }],
+    tools: [],
+  },
+  activate(ctx) {
+    const logger = ctx.resolve('logger');
+    logger.info('Greeter plugin activated');
 
-const greeter = broker.resolve<{ greet(name: string): string }>('greeter');
-console.log(greeter.greet('world')); // Hello, world!
+    ctx.provide('greeter', {
+      greet: (name: string) => {
+        const msg = `Hello, ${name}!`;
+        logger.info(msg);
+        return msg;
+      },
+    });
+  },
+};
+
+broker.register(loggerPlugin);
+broker.register(greeterPlugin);
+
+try {
+  await broker.activate(); // Resolves deps, activates in order
+} catch (err) {
+  console.error('Activation failed:', err);
+  process.exit(1);
+}
+
+// Use the resolved capability
+const greeter = broker.resolve('greeter');
+greeter.greet('world'); // Logs both to logger and outputs "Hello, world!"
 ```
 
 ## Packages
@@ -75,7 +123,7 @@ await broker.activate();        // resolve deps, call activate() in topo order
 
 ### Plugin
 
-Plain object — no base class, no decorators.
+Plain object — no base class, no decorators. Has lifecycle: `registered` → `resolving` → `active` → `inactive`.
 
 ```typescript
 const plugin: Plugin = {
@@ -88,16 +136,23 @@ const plugin: Plugin = {
     tags: ['storage', 'io'],
   },
   async activate(ctx) {
+    // Called during broker.activate() after dependencies resolved
     const logger = ctx.resolveOptional('logger');
     ctx.provide('storage', new FileStorage(logger));
     ctx.registerToolHandler('read-file', (params) => ({ content: '...' }));
   },
   contributeContext(request, budget) {
-    // synchronous, <5ms, no I/O
+    // SYNC, <5ms, no I/O. Called during context assembly.
+    // Plugins fetch data during activate(), cache for use here.
     return { pluginKey: this.key, priority: 50, systemPromptFragment: '...' };
+  },
+  async deactivate() {
+    // Optional: cleanup when plugin stops
   },
 };
 ```
+
+**Key constraint:** `contributeContext()` is synchronous. Fetch data during `activate()` and cache it.
 
 ### Capability Contracts
 
@@ -148,6 +203,59 @@ const results = broker.searchTools({
 // TF-IDF ranking: name (3x), description (2x), tags (2x)
 ```
 
+### Error Handling
+
+All errors extend `RhodiumError` with `.code` and `.pluginKey`. Typed errors:
+
+```typescript
+import {
+  CapabilityNotFoundError,    // Required capability missing
+  CircularDependencyError,     // Cycle in dependency graph
+  CapabilityViolationError,    // Provider shape doesn't match interface
+  ActivationTimeoutError,      // Plugin activation too slow
+  ActivationError,             // Plugin activation threw
+  DuplicatePluginError,        // Same key registered twice
+} from 'rhodium';
+```
+
+Error boundaries per plugin — a failure never propagates unless there's a declared dependency.
+
+```typescript
+try {
+  await broker.activate();
+} catch (err) {
+  if (err instanceof CircularDependencyError) {
+    console.error(`Cycle: ${err.message}`); // "plugin-a → plugin-b → plugin-a"
+  }
+}
+```
+
+### Event Bus
+
+Plugins emit and listen to events without direct references:
+
+```typescript
+// Plugin A emits
+ctx.emit('user-logged-in', { userId: 123 });
+
+// Plugin B listens
+broker.on('user-logged-in', (event) => {
+  console.log(`User ${event.userId} logged in`);
+});
+```
+
+### Hot Registration
+
+Register and activate plugins after broker startup:
+
+```typescript
+await broker.activate();
+
+// Later: add a new plugin
+broker.register(newPlugin);
+await broker.activatePlugin('new-plugin');
+```
+
 ### Testing
 
 ```typescript
@@ -172,6 +280,19 @@ console.log(mockContext.emittedEvents);
 | `broker.activate()` | <100ms (20 plugins) |
 | `searchTools()` | <2ms (100 tools) |
 | Memory per plugin | <10KB baseline |
+
+## Learn More
+
+**Deep dives into each subsystem:**
+- [`packages/core/CLAUDE.md`](./packages/core/CLAUDE.md) — Broker, lifecycle, error boundaries, <1ms/plugin targets
+- [`packages/capabilities/CLAUDE.md`](./packages/capabilities/CLAUDE.md) — Type-level capability contracts
+- [`packages/budget/CLAUDE.md`](./packages/budget/CLAUDE.md) — Token allocation strategies
+- [`packages/discovery/CLAUDE.md`](./packages/discovery/CLAUDE.md) — TF-IDF search, 85% token reduction
+- [`packages/graph/CLAUDE.md`](./packages/graph/CLAUDE.md) — DAG, cycle detection, resolver
+- [`packages/context/CLAUDE.md`](./packages/context/CLAUDE.md) — 6-stage pipeline, middleware ordering
+- [`packages/testing/CLAUDE.md`](./packages/testing/CLAUDE.md) — Isolation patterns, what NOT to mock
+
+**Architecture decisions:** See [CLAUDE.md](./CLAUDE.md) for ADRs and design rationale (plain objects over classes, synchronous context assembly, etc.).
 
 ## Compatibility
 

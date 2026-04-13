@@ -94,7 +94,7 @@ export function createTestBroker(
   // Mirror every broker event into the mock context so integration tests can
   // assert on the event stream via `mockContext.emittedEvents`.
   for (const event of BROKER_EVENT_NAMES) {
-    broker.on(event, (payload) => {
+    broker.on(event, (payload: unknown) => {
       mockContext.emittedEvents.push({ event, payload });
     });
   }
