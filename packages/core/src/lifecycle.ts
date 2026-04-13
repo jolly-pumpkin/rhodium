@@ -298,16 +298,19 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
     try {
       if (plugin.activate) {
         let timerId: ReturnType<typeof setTimeout> | undefined;
-        await Promise.race([
-          Promise.resolve().then(() => plugin.activate!(ctx)),
-          new Promise<never>((_, reject) => {
-            timerId = setTimeout(
-              () => reject(new ActivationTimeoutError(pluginKey, timeoutMs)),
-              timeoutMs
-            );
-          }),
-        ]);
-        if (timerId) clearTimeout(timerId);
+        try {
+          await Promise.race([
+            Promise.resolve().then(() => plugin.activate!(ctx)),
+            new Promise<never>((_, reject) => {
+              timerId = setTimeout(
+                () => reject(new ActivationTimeoutError(pluginKey, timeoutMs)),
+                timeoutMs
+              );
+            }),
+          ]);
+        } finally {
+          if (timerId) clearTimeout(timerId);
+        }
       }
 
       registry.setState(pluginKey, 'active');
@@ -470,9 +473,14 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       graph.addPlugin(pluginKey, provides, needs);
 
       // Check that all required deps are satisfied
-      for (const dep of plugin.manifest.needs) {
-        if (dep.optional) continue;
-        resolver.resolve(dep as DependencyDeclaration, pluginKey, plugin.version);
+      try {
+        for (const dep of plugin.manifest.needs) {
+          if (dep.optional) continue;
+          resolver.resolve(dep as DependencyDeclaration, pluginKey, plugin.version);
+        }
+      } catch (err) {
+        registry.setState(pluginKey, 'failed');
+        throw err;
       }
 
       const activated: string[] = [];

@@ -194,6 +194,23 @@ describe('lifecycle: timeout enforcement', () => {
   });
 });
 
+describe('lifecycle: timer cleanup on activation failure', () => {
+  it('clears timeout timer when plugin.activate() rejects', async () => {
+    const { manager, graph, registry } = makeLifecycleManager({ timeoutMs: 60_000 });
+    const plugin = makePlugin('fail-fast', {
+      activate: () => { throw new Error('immediate failure'); },
+    });
+    registry.register(plugin);
+    graph.addPlugin('fail-fast', [], []);
+
+    const result = await manager.activate();
+    expect(result.failed.length).toBe(1);
+    expect(result.failed[0].pluginKey).toBe('fail-fast');
+    // If the timer leaked, this test process would hang for 60s or
+    // produce an unhandled rejection. Completing promptly proves cleanup.
+  });
+});
+
 describe('lifecycle: error boundary', () => {
   it('plugin A throws → failed contains A, others still activate', async () => {
     const { manager, graph, registry } = makeLifecycleManager();
@@ -470,7 +487,7 @@ describe('lifecycle: activatePlugin() hot path', () => {
     expect(activateCount).toBe(1); // no change
   });
 
-  it('activatePlugin() with unsatisfied required dep → throws', async () => {
+  it('activatePlugin() with unsatisfied required dep → throws and transitions to failed', async () => {
     const { manager, graph, registry } = makeLifecycleManager();
 
     const plugin = makePlugin('test', {
@@ -486,6 +503,9 @@ describe('lifecycle: activatePlugin() hot path', () => {
     } catch (err) {
       expect(err instanceof Error).toBe(true);
     }
+
+    // Plugin should be in 'failed' state, not stuck in 'registered'
+    expect(registry.getState('test')).toBe('failed');
   });
 
   it('activatePlugin() registers plugin in graph for consistent deactivation ordering', async () => {
