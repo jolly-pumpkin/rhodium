@@ -7,10 +7,7 @@
     "paths": {
       "rhodium-core": ["../core/src/index.ts"],
       "rhodium-capabilities": ["../capabilities/src/index.ts"],
-      "rhodium-budget": ["../budget/src/index.ts"],
-      "rhodium-discovery": ["../discovery/src/index.ts"],
       "rhodium-graph": ["../graph/src/index.ts"],
-      "rhodium-context": ["../context/src/index.ts"],
       "rhodium-testing": ["../testing/src/index.ts"]
     }
   },
@@ -18,10 +15,7 @@
   "references": [
     { "path": "../core" },
     { "path": "../capabilities" },
-    { "path": "../budget" },
-    { "path": "../discovery" },
     { "path": "../graph" },
-    { "path": "../context" },
     { "path": "../testing" }
   ]
 }
