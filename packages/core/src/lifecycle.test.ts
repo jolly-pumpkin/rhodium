@@ -688,6 +688,27 @@ describe('lifecycle: PluginContext.emit()', () => {
     expect(receivedPayload).toBeDefined();
     expect((receivedPayload as any).detail).toEqual({ data: 'hello' });
   });
+
+  it('emit() includes pluginKey in the payload', async () => {
+    const { manager, graph, registry, eventBus } = makeLifecycleManager();
+
+    let receivedPayload: unknown;
+    eventBus.on('custom:event', (payload: unknown) => {
+      receivedPayload = payload;
+    });
+
+    const plugin = makePlugin('emitter', {
+      activate: (ctx) => {
+        ctx.emit('custom:event', { data: 'test' });
+      },
+    });
+
+    registry.register(plugin);
+    graph.addPlugin('emitter', [], []);
+
+    await manager.activate();
+    expect((receivedPayload as any).pluginKey).toBe('emitter');
+  });
 });
 
 describe('lifecycle: getPluginStates() returns rich PluginState', () => {

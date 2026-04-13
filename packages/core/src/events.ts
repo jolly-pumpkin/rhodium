@@ -25,8 +25,8 @@ export function createEventBus(): EventBus {
       for (const handler of eventHandlers) {
         try {
           handler(payload);
-        } catch {
-          // Silently swallow handler errors to prevent event loop corruption
+        } catch (err) {
+          console.warn('[rhodium] Event handler error:', err);
         }
       }
     },

@@ -9,7 +9,7 @@ export interface BrokerConfig {
   /** Maximum time (ms) to wait for all required dependencies during activate(). Default: 30_000. */
   activationTimeoutMs?: number;
   /** Handler for errors that escape plugin error boundaries. */
-  onUnhandledError?: (error: RhodiumError) => void;
+  onUnhandledError?: (error: Error) => void;
   /** Enable structured logging of broker activity. Default: false. */
   debug?: boolean;
 }

@@ -191,6 +191,7 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
         eventBus.emit(event, {
           timestamp: Date.now(),
           event,
+          pluginKey,
           detail: payload,
         });
       },
@@ -203,7 +204,7 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       debug: (message, data) => console.debug(prefix, message, data ?? ''),
       info: (message, data) => console.info(prefix, message, data ?? ''),
       warn: (message, data) => console.warn(prefix, message, data ?? ''),
-      error: (message, _error, data) => console.error(prefix, message, data ?? ''),
+      error: (message, error, data) => console.error(prefix, message, ...(error ? [error] : []), data ?? ''),
     };
   }
 
