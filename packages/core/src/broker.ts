@@ -134,6 +134,26 @@ export function createBroker(config: BrokerConfig = {}): Broker {
           }
         }
       }
+      // Emit dependency:unresolved for dependents that lose a needed capability
+      if (plugin) {
+        const dependents = graph.getDependents(pluginKey);
+        const providedCaps = plugin.manifest.provides.map((p) => p.capability);
+        for (const depKey of dependents) {
+          const dep = registry.getPlugin(depKey);
+          if (!dep) continue;
+          for (const cap of providedCaps) {
+            if (dep.manifest.needs.some((n) => n.capability === cap)) {
+              eventBus.emit('dependency:unresolved', {
+                timestamp: Date.now(),
+                event: 'dependency:unresolved' as BrokerEvent,
+                pluginKey: depKey,
+                capability: cap,
+              });
+            }
+          }
+        }
+      }
+
       await registry.unregister(pluginKey);
       graph.removePlugin(pluginKey);
       resolver.unregisterPlugin(pluginKey);

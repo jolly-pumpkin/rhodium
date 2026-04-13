@@ -317,6 +317,18 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
       const durationMs = Date.now() - start;
       emitEvent('plugin:activated', pluginKey, { detail: { durationMs } });
       activated.push(pluginKey);
+
+      // Emit dependency:resolved for each declared need that was satisfied
+      for (const dep of plugin.manifest.needs) {
+        const entry = resolver.resolve(
+          { capability: dep.capability, optional: true, variant: dep.variant },
+          pluginKey,
+          plugin.version,
+        );
+        if (entry) {
+          emitEvent('dependency:resolved', pluginKey, { capability: dep.capability });
+        }
+      }
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       const wrappedError =

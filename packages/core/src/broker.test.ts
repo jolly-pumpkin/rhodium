@@ -400,7 +400,63 @@ describe('createBroker — getLog() and structured logging', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 7. Two-broker isolation (ADR-009)
+// 7. dependency:resolved and dependency:unresolved events
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('createBroker — dependency:resolved and dependency:unresolved events', () => {
+  it('emits dependency:resolved when a consumer activates with a satisfied dependency', async () => {
+    const broker = makeBroker();
+    const events: BrokerEventPayload[] = [];
+    broker.on('dependency:resolved', (p) => events.push(p));
+
+    broker.register(makePlugin('provider', {
+      manifest: { name: 'P', description: 'P', provides: [{ capability: 'svc' }], needs: [] },
+      activate(ctx) { ctx.provide('svc', {}); },
+    }));
+    broker.register(makePlugin('consumer', {
+      manifest: { name: 'C', description: 'C', provides: [], needs: [{ capability: 'svc' }] },
+    }));
+    await broker.activate();
+
+    expect(events.length).toBe(1);
+    expect(events[0].pluginKey).toBe('consumer');
+    expect(events[0].capability).toBe('svc');
+  });
+
+  it('does not emit dependency:resolved for plugins with no dependencies', async () => {
+    const broker = makeBroker();
+    const events: BrokerEventPayload[] = [];
+    broker.on('dependency:resolved', (p) => events.push(p));
+
+    broker.register(makePlugin('standalone'));
+    await broker.activate();
+
+    expect(events.length).toBe(0);
+  });
+
+  it('emits dependency:unresolved when a provider is unregistered', async () => {
+    const broker = makeBroker();
+    const events: BrokerEventPayload[] = [];
+    broker.on('dependency:unresolved', (p) => events.push(p));
+
+    broker.register(makePlugin('provider', {
+      manifest: { name: 'P', description: 'P', provides: [{ capability: 'svc' }], needs: [] },
+      activate(ctx) { ctx.provide('svc', {}); },
+    }));
+    broker.register(makePlugin('consumer', {
+      manifest: { name: 'C', description: 'C', provides: [], needs: [{ capability: 'svc' }] },
+    }));
+    await broker.activate();
+
+    await broker.unregister('provider');
+    expect(events.length).toBe(1);
+    expect(events[0].pluginKey).toBe('consumer');
+    expect(events[0].capability).toBe('svc');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. Two-broker isolation (ADR-009)
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('createBroker — two brokers in the same process are independent', () => {
