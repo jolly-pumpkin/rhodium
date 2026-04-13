@@ -1,32 +1,17 @@
 import type { CapabilityContract } from '../../../packages/capabilities/src/define.js';
-
-// ============================================================
-// Token budget configuration
-// ============================================================
-
-export interface TokenBudgetConfig {
-  /** Total token budget for the assembled context */
-  maxTokens: number;
-  /** Tokens reserved for the system prompt (deducted before allocation) */
-  reservedSystemTokens?: number;
-  /** Tokens reserved for tool definitions (deducted before allocation) */
-  reservedToolTokens?: number;
-  /** How to divide the remaining budget across contributions */
-  allocationStrategy?: 'priority' | 'proportional' | 'equal';
-}
+import type { RhodiumError } from './errors.js';
 
 // ============================================================
 // Broker configuration
 // ============================================================
 
 export interface BrokerConfig {
-  defaultTokenBudget?: TokenBudgetConfig;
-  tokenCounter?: 'chars3' | 'chars4' | 'tiktoken' | ((text: string) => number);
+  /** Maximum time (ms) to wait for all required dependencies during activate(). Default: 30_000. */
   activationTimeoutMs?: number;
-  onUnhandledError?: (error: Error) => void;
+  /** Handler for errors that escape plugin error boundaries. */
+  onUnhandledError?: (error: RhodiumError) => void;
+  /** Enable structured logging of broker activity. Default: false. */
   debug?: boolean;
-  maxContributionBytes?: number;
-  lazyActivation?: boolean;
 }
 
 // ============================================================
@@ -41,68 +26,31 @@ export type BrokerEvent =
   | 'plugin:deactivating'
   | 'plugin:deactivated'
   | 'plugin:error'
-  | 'plugin:failed'
+  | 'capability:provided'
+  | 'capability:removed'
+  | 'dependency:resolved'
+  | 'dependency:unresolved'
   | 'broker:activated'
-  | 'broker:deactivated'
-  | 'context:assembled'
-  | 'budget:overflow'
-  | 'capability:resolved'
-  | 'tool:executed'
-  | 'tool:error';
+  | 'broker:deactivated';
 
-export interface BudgetOverflowPayload {
-  pluginKey: string;
-  priority: number;
-  severity: 'info' | 'warning' | 'critical';
-  droppedTokens: number;
-  reason: 'atomic-no-fit' | 'below-min-tokens' | 'budget-exceeded';
+export interface BrokerEventPayload {
+  timestamp: number;
+  event: BrokerEvent;
+  pluginKey?: string;
+  capability?: string;
+  detail?: unknown;
 }
 
-export type BrokerEventPayload = {
-  'plugin:registered': { pluginKey: string };
-  'plugin:unregistered': { pluginKey: string };
-  'plugin:activating': { pluginKey: string };
-  'plugin:activated': { pluginKey: string; durationMs: number };
-  'plugin:deactivating': { pluginKey: string };
-  'plugin:deactivated': { pluginKey: string };
-  'plugin:error': { pluginKey: string; error: Error; severity: ErrorSeverity };
-  'plugin:failed': { pluginKey: string; error: Error };
-  'broker:activated': { pluginCount: number; durationMs: number };
-  'broker:deactivated': { pluginCount: number };
-  'context:assembled': { totalTokens: number; droppedCount: number; durationMs: number };
-  'budget:overflow': BudgetOverflowPayload;
-  'capability:resolved': { capability: string; providerKey: string };
-  'tool:executed': { pluginKey: string; toolName: string; durationMs: number };
-  'tool:error': { pluginKey: string; toolName: string; error: Error };
-};
-
-export type BrokerEventHandler<E extends BrokerEvent> = (
-  payload: BrokerEventPayload[E]
-) => void;
+export type BrokerEventHandler = (payload: BrokerEventPayload) => void;
 
 // ============================================================
 // Plugin manifest types
 // ============================================================
 
-export interface ToolExample {
-  scenario: string;
-  input: Record<string, unknown>;
-  output: unknown;
-}
-
-export interface ToolDeclaration {
-  name: string;
-  description: string;
-  /** JSON Schema object for parameters */
-  parameters?: Record<string, unknown>;
-  examples?: ToolExample[];
-  tags?: string[];
-}
-
 export interface CapabilityDeclaration {
   /** The capability token name (e.g. 'llm-provider') */
   capability: string;
-  /** Priority when multiple providers exist; higher wins */
+  /** Priority when multiple providers exist; higher wins. Default: 0. */
   priority?: number;
   /** Optional variant label for filtered resolution */
   variant?: string;
@@ -113,7 +61,7 @@ export interface CapabilityDeclaration {
 export interface DependencyDeclaration {
   /** The capability token name being depended on */
   capability: string;
-  /** Whether the dependency is optional */
+  /** Whether the dependency is optional. Default: false (required). */
   optional?: boolean;
   /** Whether to resolve all providers (not just highest-priority) */
   multiple?: boolean;
@@ -122,18 +70,20 @@ export interface DependencyDeclaration {
 }
 
 export interface PluginManifest {
+  /** Human-readable name for display/logging */
+  name: string;
+  /** Brief description of what this plugin does */
+  description: string;
   provides: CapabilityDeclaration[];
   needs: DependencyDeclaration[];
-  tools: ToolDeclaration[];
   tags?: string[];
-  description?: string;
 }
 
 // ============================================================
-// Plugin state & error severity
+// Plugin status & state
 // ============================================================
 
-export type PluginState =
+export type PluginStatus =
   | 'registered'
   | 'resolving'
   | 'active'
@@ -141,7 +91,28 @@ export type PluginState =
   | 'failed'
   | 'unregistered';
 
-export type ErrorSeverity = 'info' | 'warning' | 'error' | 'critical';
+export type ErrorSeverity = 'warning' | 'error' | 'fatal';
+
+export interface PluginState {
+  key: string;
+  version: string;
+  status: PluginStatus;
+  /** Capabilities this plugin is currently providing */
+  activeCapabilities: string[];
+  /** Commands this plugin has registered */
+  registeredCommands: string[];
+  /** Dependencies and their resolution status */
+  dependencies: Array<{
+    capability: string;
+    optional: boolean;
+    resolved: boolean;
+    providerKey?: string;
+  }>;
+  /** Timestamp of last state transition */
+  lastTransition: number;
+  /** Error that caused 'failed' state, if applicable */
+  error?: RhodiumError;
+}
 
 // ============================================================
 // Plugin logger
@@ -151,104 +122,14 @@ export interface PluginLogger {
   debug(message: string, data?: Record<string, unknown>): void;
   info(message: string, data?: Record<string, unknown>): void;
   warn(message: string, data?: Record<string, unknown>): void;
-  error(message: string, data?: Record<string, unknown>): void;
+  error(message: string, error?: Error, data?: Record<string, unknown>): void;
 }
 
 // ============================================================
-// Tool and command handlers
+// Command handler
 // ============================================================
 
-export type ToolResult = {
-  content: string | Record<string, unknown>;
-  isError?: boolean;
-};
-
-export type ToolHandler = (
-  params: Record<string, unknown>,
-  ctx: PluginContext
-) => Promise<ToolResult> | ToolResult;
-
-export type CommandHandler = (
-  args: string[],
-  ctx: PluginContext
-) => Promise<void> | void;
-
-// ============================================================
-// Tool execution and middleware
-// ============================================================
-
-export interface ToolCall {
-  toolName: string;
-  pluginKey: string;
-  parameters: Record<string, unknown>;
-  timestamp: number;
-}
-
-export interface MiddlewarePlugin {
-  preToolCall?(call: ToolCall): ToolCall | ToolCall[] | null;
-  postToolCall?(call: ToolCall, result: ToolResult): ToolResult;
-  postAssembly?(context: AssembledContext): AssembledContext;
-}
-
-// ============================================================
-// Context assembly types
-// ============================================================
-
-export interface ContextRequest<TState = unknown> {
-  query?: string;
-  state?: TState;
-  tokenBudget?: TokenBudgetConfig;
-  includePlugins?: string[];
-  excludePlugins?: string[];
-}
-
-export interface RemainingBudget {
-  totalTokens: number;
-  usedTokens: number;
-  remainingTokens: number;
-  allocationStrategy: 'priority' | 'proportional' | 'equal';
-}
-
-export interface ContextContribution {
-  pluginKey: string;
-  priority: number;
-  systemPromptFragment?: string;
-  tools?: ToolDeclaration[];
-  /** Minimum tokens this contribution needs to be useful. Drop entirely if budget < minTokens */
-  minTokens?: number;
-  /** If true, never truncate — either include fully or drop entirely */
-  atomic?: boolean;
-}
-
-export interface AssembledTool extends ToolDeclaration {
-  pluginKey: string;
-  relevanceScore?: number;
-}
-
-export interface DroppedContribution {
-  pluginKey: string;
-  priority: number;
-  reason: 'budget-exceeded' | 'atomic-no-fit' | 'below-min-tokens' | 'plugin-opted-out' | 'priority-below-threshold' | 'error' | 'contribution-too-large';
-  estimatedTokens: number;
-  severity: 'info' | 'warning' | 'critical';
-}
-
-export interface AssemblyMeta {
-  totalPlugins: number;
-  contributingPlugins: number;
-  droppedPlugins: number;
-  allocationStrategy: 'priority' | 'proportional' | 'equal';
-  durationMs: number;
-  tokenCounter: string;
-}
-
-export interface AssembledContext {
-  systemPrompt: string;
-  tools: AssembledTool[];
-  totalTokens: number;
-  dropped: DroppedContribution[];
-  meta: AssemblyMeta;
-}
+export type CommandHandler = (...args: unknown[]) => Promise<unknown>;
 
 // ============================================================
 // PluginContext (passed to activate())
@@ -258,17 +139,22 @@ export interface PluginContext {
   readonly pluginKey: string;
   readonly log: PluginLogger;
 
+  /** Resolve a required single-provider capability. Throws if not available. */
   resolve<T>(capability: string): T;
+  /** Resolve all providers of a capability. Returns []. */
   resolveAll<T>(capability: string): T[];
+  /** Resolve a capability that was declared optional. Returns undefined if not available. */
   resolveOptional<T>(capability: string): T | undefined;
 
+  /** Register the implementation for a capability declared in manifest.provides. */
   provide<T>(capability: string, implementation: T): void;
-
-  registerToolHandler(toolName: string, handler: ToolHandler): void;
+  /** Register a command that application code can invoke directly. */
   registerCommand(commandName: string, handler: CommandHandler): void;
 
+  /** Report a recoverable error without deactivating the plugin. */
   reportError(error: Error, severity?: ErrorSeverity): void;
-  emit<E extends BrokerEvent>(event: E, payload: BrokerEventPayload[E]): void;
+  /** Emit a custom event through the broker's event bus. */
+  emit(event: string, payload?: unknown): void;
 }
 
 // ============================================================
@@ -282,20 +168,7 @@ export interface Plugin {
 
   activate?(ctx: PluginContext): Promise<void> | void;
   deactivate?(): Promise<void> | void;
-
-  contributeContext?(
-    request: ContextRequest,
-    budget: RemainingBudget
-  ): ContextContribution | null | undefined;
-
-  onDependencyRemoved?(capability: string): void;
-
-  // Middleware hooks (RHOD-016). A plugin becomes middleware by declaring
-  // `provides: [{ capability: 'middleware', priority }]` and implementing any of
-  // these hooks. Priority comes from the CapabilityDeclaration, not the hooks.
-  preToolCall?(call: ToolCall): ToolCall | ToolCall[] | null;
-  postToolCall?(call: ToolCall, result: ToolResult): ToolResult;
-  postAssembly?(context: AssembledContext): AssembledContext;
+  onDependencyRemoved?(capability: string, providerKey: string): void;
 }
 
 // ============================================================
@@ -303,9 +176,13 @@ export interface Plugin {
 // ============================================================
 
 export interface ActivationResult {
+  /** Plugins that activated successfully */
   activated: string[];
-  failed: Array<{ pluginKey: string; error: Error }>;
+  /** Plugins that failed to activate, with reasons */
+  failed: Array<{ pluginKey: string; error: RhodiumError }>;
+  /** Plugins that are registered but waiting on unmet required dependencies */
   pending: Array<{ pluginKey: string; unmetDependencies: string[] }>;
+  /** Total activation time in milliseconds */
   durationMs: number;
 }
 
@@ -317,60 +194,51 @@ export interface BrokerLogEntry {
   timestamp: number;
   event: BrokerEvent | string;
   pluginKey?: string;
+  message: string;
   data?: Record<string, unknown>;
 }
 
 export interface BrokerLog {
   entries: BrokerLogEntry[];
-}
-
-export interface BrokerLogFilter {
-  event?: BrokerEvent | string;
-  pluginKey?: string;
-  since?: number;
+  /** Filter entries by event type */
+  filter(event: BrokerEvent | string): BrokerLogEntry[];
+  /** Filter entries by plugin key */
+  forPlugin(pluginKey: string): BrokerLogEntry[];
+  /** All unresolved dependency declarations */
+  pendingDependencies: Array<{
+    pluginKey: string;
+    capability: string;
+    optional: boolean;
+  }>;
 }
 
 // ============================================================
-// Tool search types (defined here until packages/discovery is populated)
-// These will be moved to rhodium-discovery in Task 7
+// Broker interface
 // ============================================================
-
-export interface ToolSearchFilter {
-  query?: string;
-  capability?: string;
-  tags?: string[];
-  limit?: number;
-  minRelevance?: number;
-}
-
-export interface ToolSearchResult {
-  pluginKey: string;
-  toolName: string;
-  description: string;
-  tags?: string[];
-  relevanceScore: number;
-  isPluginActivated: boolean;
-}
 
 export interface Broker {
+  // --- Registration ---
   register(plugin: Plugin): void;
   unregister(pluginKey: string): Promise<void>;
 
+  // --- Lifecycle ---
   activate(): Promise<ActivationResult>;
   deactivate(): Promise<void>;
-  activatePlugin(pluginKey: string): Promise<void>;
+  activatePlugin(pluginKey: string): Promise<ActivationResult>;
 
+  // --- Resolution ---
   resolve<T>(capability: string): T;
   resolveAll<T>(capability: string): T[];
   resolveOptional<T>(capability: string): T | undefined;
 
-  searchTools(query: string | ToolSearchFilter): ToolSearchResult[];
-  assembleContext<TState = unknown>(request?: ContextRequest<TState>): AssembledContext;
-
-  on<E extends BrokerEvent>(event: E, handler: BrokerEventHandler<E>): () => void;
-
-  getLog(filter?: BrokerLogFilter): BrokerLog;
+  // --- Introspection ---
+  getManifests(): Map<string, PluginManifest>;
+  getManifest(pluginKey: string): PluginManifest | undefined;
   getPluginStates(): Map<string, PluginState>;
+
+  // --- Observation ---
+  on(event: BrokerEvent, handler: BrokerEventHandler): () => void;
+  getLog(): BrokerLog;
 }
 
 // ============================================================
@@ -400,28 +268,14 @@ export interface DependencyGraph {
 export interface ProviderEntry {
   pluginKey: string;
   capability: string;
-  priority: number; // defaults to 0 if not set in CapabilityDeclaration
+  priority: number;
   variant: string | undefined;
-  registrationIndex: number; // monotonically increasing; higher = more recently registered
+  registrationIndex: number;
 }
 
 export interface CapabilityResolver {
-  /**
-   * Register a plugin as a provider of a capability.
-   * registrationIndex must be monotonically increasing (broker increments a counter).
-   */
   registerProvider(pluginKey: string, declaration: CapabilityDeclaration, registrationIndex: number): void;
-  /** Remove all provider entries for a plugin. */
   unregisterPlugin(pluginKey: string): void;
-  /**
-   * Resolve a single required or optional dependency.
-   * - Returns the winning ProviderEntry, or undefined for optional+missing.
-   * - Throws CapabilityNotFoundError for required+missing.
-   */
   resolve(dep: DependencyDeclaration, neededBy: string, neededByVersion: string): ProviderEntry | undefined;
-  /**
-   * Resolve multiple providers (dep.multiple === true).
-   * Always returns an array (empty if none found and dep.optional).
-   */
   resolveMany(dep: DependencyDeclaration, neededBy: string, neededByVersion: string): ProviderEntry[];
 }
