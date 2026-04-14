@@ -13,6 +13,7 @@
   },
   "scripts": {
     "build": "rm -rf dist tsconfig.tsbuildinfo && tsc",
+    "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
