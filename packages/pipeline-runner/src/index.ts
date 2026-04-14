@@ -1,4 +1,6 @@
 // Pipeline runner — barrel export (populated as modules are added)
+export { runPipeline } from './runner.js';
+export type { PipelineResult, BrokerFacade } from './runner.js';
 export { executeSingleStage, executeFanoutStage } from './stage.js';
 export type { ResolveFn, ResolveAllFn, EmitFn, ProviderHandle } from './stage.js';
 export { concatReducer, priorityPickReducer } from './reducers.js';
