@@ -1,4 +1,6 @@
 // Pipeline runner — barrel export (populated as modules are added)
+export { executeSingleStage, executeFanoutStage } from './stage.js';
+export type { ResolveFn, ResolveAllFn, EmitFn, ProviderHandle } from './stage.js';
 export { concatReducer, priorityPickReducer } from './reducers.js';
 export type { FanoutResult } from './reducers.js';
 export { validateStageData } from './validate.js';

@@ -25,6 +25,8 @@ describe('validateStageData', () => {
     const result = validateStageData('stage-1', 'input', failingSchema, { foo: 'bar' });
     expect(result.ok).toBe(false);
     if (!result.ok) {
+      expect(result.stageId).toBe('stage-1');
+      expect(result.phase).toBe('input');
       expect(result.errors).toHaveLength(2);
       expect(result.errors[0]).toContain('name');
     }

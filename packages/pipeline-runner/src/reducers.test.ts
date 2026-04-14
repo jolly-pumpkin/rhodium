@@ -2,7 +2,7 @@ import { describe, it, expect } from 'bun:test';
 import { concatReducer, priorityPickReducer } from './reducers.js';
 
 describe('concatReducer', () => {
-  it('concatenates all results into a flat array', () => {
+  it('collects all outputs into an array preserving input order', () => {
     const results = [
       { providerId: 'a', priority: 5, output: ['x', 'y'] },
       { providerId: 'b', priority: 10, output: ['z'] },
@@ -27,5 +27,13 @@ describe('priorityPickReducer', () => {
 
   it('returns undefined for no results', () => {
     expect(priorityPickReducer([])).toBeUndefined();
+  });
+
+  it('returns first result when priorities are tied (first-wins)', () => {
+    const results = [
+      { providerId: 'a', priority: 5, output: 'first' },
+      { providerId: 'b', priority: 5, output: 'second' },
+    ];
+    expect(priorityPickReducer(results)).toBe('first');
   });
 });
