@@ -15,7 +15,7 @@
     "rhodium-capabilities": "workspace:*"
   },
   "scripts": {
-    "build": "rm -rf dist && tsc",
+    "build": "rm -rf dist tsconfig.tsbuildinfo && tsc",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   }
