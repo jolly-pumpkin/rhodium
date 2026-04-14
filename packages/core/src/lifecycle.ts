@@ -6,7 +6,7 @@ import {
   UndeclaredCapabilityError,
   type RhodiumError,
 } from './errors.js';
-import { createCapabilityValidator } from '../../../packages/capabilities/src/index.js';
+import { createCapabilityValidator } from 'rhodium-capabilities';
 import type {
   ActivationResult,
   BrokerEventPayload,
@@ -421,8 +421,9 @@ export function createLifecycleManager(opts: LifecycleManagerOpts) {
 
         for (let i = 0; i < results.length; i++) {
           const result = results[i];
-          if (result && result.status === 'rejected') {
-            failedSet.add(toActivate[i]);
+          const pluginKey = toActivate[i];
+          if (result && result.status === 'rejected' && pluginKey) {
+            failedSet.add(pluginKey);
           }
         }
       }

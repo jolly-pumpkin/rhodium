@@ -1,3 +1,2 @@
-export * from './types.js';
-export { createDependencyGraph } from './dag.js';
-export { createCapabilityResolver } from './resolver.js';
+export { createDependencyGraph, createCapabilityResolver } from 'rhodium-core';
+export type { DependencyCheck, DependencyGraph, ProviderEntry, CapabilityResolver } from 'rhodium-core';

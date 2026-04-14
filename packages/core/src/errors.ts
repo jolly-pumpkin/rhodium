@@ -3,7 +3,7 @@
 // ============================================================
 
 export class RhodiumError extends Error {
-  static readonly CODE = 'RHODIUM_ERROR';
+  static readonly CODE: string = 'RHODIUM_ERROR';
   readonly code: string;
   readonly pluginKey?: string;
   readonly timestamp: number;
@@ -24,7 +24,7 @@ export class RhodiumError extends Error {
 // ============================================================
 
 export class CapabilityNotFoundError extends RhodiumError {
-  static readonly CODE = 'CAPABILITY_NOT_FOUND';
+  static override readonly CODE = 'CAPABILITY_NOT_FOUND';
 
   constructor(
     capability: string,
@@ -60,7 +60,7 @@ export class CapabilityNotFoundError extends RhodiumError {
 // ============================================================
 
 export class CircularDependencyError extends RhodiumError {
-  static readonly CODE = 'CIRCULAR_DEPENDENCY';
+  static override readonly CODE = 'CIRCULAR_DEPENDENCY';
 
   /**
    * The detected cycle path, in order, as plugin keys.
@@ -97,7 +97,7 @@ export class CircularDependencyError extends RhodiumError {
 // ============================================================
 
 export class ActivationTimeoutError extends RhodiumError {
-  static readonly CODE = 'ACTIVATION_TIMEOUT';
+  static override readonly CODE = 'ACTIVATION_TIMEOUT';
 
   constructor(pluginKey: string, timeoutMs: number) {
     super(
@@ -109,8 +109,8 @@ export class ActivationTimeoutError extends RhodiumError {
 }
 
 export class ActivationError extends RhodiumError {
-  static readonly CODE = 'ACTIVATION_FAILED';
-  readonly cause: Error;
+  static override readonly CODE = 'ACTIVATION_FAILED';
+  override readonly cause: Error;
 
   constructor(pluginKey: string, cause: Error) {
     super(
@@ -135,7 +135,7 @@ export interface CapabilityViolation {
 }
 
 export class CapabilityViolationError extends RhodiumError {
-  static readonly CODE = 'CAPABILITY_VIOLATION';
+  static override readonly CODE = 'CAPABILITY_VIOLATION';
 
   constructor(pluginKey: string, capability: string, violations: CapabilityViolation[]) {
     const sections: string[] = [];
@@ -190,7 +190,7 @@ export class CapabilityViolationError extends RhodiumError {
 // ============================================================
 
 export class UndeclaredCapabilityError extends RhodiumError {
-  static readonly CODE = 'UNDECLARED_CAPABILITY';
+  static override readonly CODE = 'UNDECLARED_CAPABILITY';
 
   constructor(pluginKey: string, capability: string) {
     super(
@@ -206,7 +206,7 @@ export class UndeclaredCapabilityError extends RhodiumError {
 // ============================================================
 
 export class DuplicatePluginError extends RhodiumError {
-  static readonly CODE = 'DUPLICATE_PLUGIN';
+  static override readonly CODE = 'DUPLICATE_PLUGIN';
 
   constructor(pluginKey: string) {
     super(

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import type { Plugin, PluginManifest } from '../../core/src/types.js';
+import type { Plugin, PluginManifest } from 'rhodium-core';
 import { createTestBroker } from './test-broker.js';
 
 // -- helpers ------------------------------------------------------------------

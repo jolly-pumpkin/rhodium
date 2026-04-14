@@ -1,5 +1,5 @@
-import { createBroker } from '../../core/src/broker.js';
-import type { BrokerConfig, BrokerEvent } from '../../core/src/types.js';
+import { createBroker } from 'rhodium-core';
+import type { BrokerConfig, BrokerEvent } from 'rhodium-core';
 import { createMockContext, type CreateMockContextOptions } from './mock-context.js';
 import type { TestBrokerResult } from './types.js';
 

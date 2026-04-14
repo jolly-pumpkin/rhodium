@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { createDependencyGraph } from './dag.js';
-import { CircularDependencyError } from 'rhodium-core';
+import { CircularDependencyError } from '../errors.js';
 
 // === Linear Chain ===
 

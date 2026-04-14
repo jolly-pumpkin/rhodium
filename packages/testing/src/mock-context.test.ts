@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
-import { CapabilityNotFoundError } from '../../core/src/errors.js';
-import type { Plugin, CommandHandler } from '../../core/src/types.js';
+import { CapabilityNotFoundError } from 'rhodium-core';
+import type { Plugin, CommandHandler } from 'rhodium-core';
 import { createMockContext } from './mock-context.js';
 
 describe('createMockContext — defaults', () => {

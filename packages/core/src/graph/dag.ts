@@ -1,5 +1,5 @@
-import { CircularDependencyError } from 'rhodium-core';
-import { DependencyGraph, DependencyCheck } from './types.js';
+import { CircularDependencyError } from '../errors.js';
+import type { DependencyGraph, DependencyCheck } from '../types.js';
 import { findCycle } from './cycle-detect.js';
 
 /**

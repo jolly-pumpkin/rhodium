@@ -18,7 +18,7 @@ import { createLifecycleManager } from './lifecycle.js';
 import {
   createDependencyGraph,
   createCapabilityResolver,
-} from '../../../packages/graph/src/index.js';
+} from './graph/index.js';
 
 /**
  * All broker events the log subscribes to.

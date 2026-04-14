@@ -5,17 +5,12 @@
     "rootDir": "./src",
     "composite": true,
     "paths": {
-      "rhodium-core": ["../core/src/index.ts"],
-      "rhodium-capabilities": ["../capabilities/src/index.ts"],
-      "rhodium-graph": ["../graph/src/index.ts"],
-      "rhodium-testing": ["../testing/src/index.ts"]
+      "rhodium-core": ["../core/dist/index.d.ts"],
+      "rhodium-capabilities": ["../capabilities/dist/index.d.ts"],
+      "rhodium-graph": ["../graph/dist/index.d.ts"],
+      "rhodium-testing": ["../testing/dist/index.d.ts"]
     }
   },
   "include": ["src/**/*"],
-  "references": [
-    { "path": "../core" },
-    { "path": "../capabilities" },
-    { "path": "../graph" },
-    { "path": "../testing" }
-  ]
+  "exclude": ["src/**/*.test.ts"]
 }

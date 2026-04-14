@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { createLifecycleManager } from './lifecycle.js';
 import { PluginRegistry } from './registry.js';
-import { createDependencyGraph } from '../../../packages/graph/src/index.js';
-import { createCapabilityResolver } from '../../../packages/graph/src/index.js';
+import { createDependencyGraph } from './graph/index.js';
+import { createCapabilityResolver } from './graph/index.js';
 import { createEventBus } from './events.js';
 import {
   ActivationTimeoutError,
@@ -10,7 +10,7 @@ import {
   CapabilityViolationError,
   UndeclaredCapabilityError,
 } from './errors.js';
-import { defineCapability } from '../../../packages/capabilities/src/index.js';
+import { defineCapability } from 'rhodium-capabilities';
 import type { Plugin, PluginManifest } from './types.js';
 import type { LifecycleManagerOpts } from './lifecycle.js';
 

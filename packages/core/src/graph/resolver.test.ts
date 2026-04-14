@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
-import { CapabilityNotFoundError } from 'rhodium-core';
-import type { CapabilityDeclaration, DependencyDeclaration } from 'rhodium-core';
-import type { CapabilityResolver } from './types.js';
+import { CapabilityNotFoundError } from '../errors.js';
+import type { CapabilityDeclaration, DependencyDeclaration } from '../types.js';
+import type { CapabilityResolver } from '../types.js';
 import { createCapabilityResolver } from './resolver.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────

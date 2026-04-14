@@ -1,6 +1,6 @@
-import { CapabilityNotFoundError } from 'rhodium-core';
-import type { CapabilityDeclaration, DependencyDeclaration } from 'rhodium-core';
-import type { CapabilityResolver, ProviderEntry } from './types.js';
+import { CapabilityNotFoundError } from '../errors.js';
+import type { CapabilityDeclaration, DependencyDeclaration } from '../types.js';
+import type { CapabilityResolver, ProviderEntry } from '../types.js';
 
 export function createCapabilityResolver(): CapabilityResolver {
   // capability → list of provider entries

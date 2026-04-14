@@ -1,9 +1,9 @@
-import { CapabilityNotFoundError } from '../../core/src/errors.js';
+import { CapabilityNotFoundError } from 'rhodium-core';
 import type {
   CommandHandler,
   ErrorSeverity,
   PluginLogger,
-} from '../../core/src/types.js';
+} from 'rhodium-core';
 import type { MockPluginContext } from './types.js';
 
 /**

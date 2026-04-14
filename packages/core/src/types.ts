@@ -1,4 +1,4 @@
-import type { CapabilityContract } from '../../../packages/capabilities/src/define.js';
+import type { CapabilityContract } from 'rhodium-capabilities';
 import type { RhodiumError } from './errors.js';
 
 // ============================================================

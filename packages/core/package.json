@@ -11,8 +11,11 @@
       "import": "./dist/index.js"
     }
   },
+  "dependencies": {
+    "rhodium-capabilities": "workspace:*"
+  },
   "scripts": {
-    "build": "tsc --emitDeclarationOnly --declarationDir ./dist && bun build ./src/index.ts --outdir ./dist --target node --format esm",
+    "build": "rm -rf dist && tsc",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   }

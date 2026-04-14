@@ -28,7 +28,7 @@
     }
   },
   "scripts": {
-    "build": "tsc --emitDeclarationOnly && bun build ./src/index.ts ./src/core.ts ./src/capabilities.ts ./src/graph.ts ./src/testing.ts --outdir ./dist --target node --format esm",
+    "build": "rm -rf dist && tsc",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
