@@ -16,15 +16,29 @@ function generateRunId(): string {
   return `run-${++runCounter}-${Date.now()}`;
 }
 
-/** Compose stage input from inputFrom references or fall back to initial input. */
+/**
+ * Compose stage input from inputFrom references or fall back to initial input.
+ *
+ * stageOutputs accumulates across iterations — a skipped stage leaves its
+ * previous iteration's value in the map. Downstream stages that reference a
+ * skipped stage via inputFrom will receive that stale value (or undefined on
+ * the first iteration). This is intentional: callers can detect a skipped
+ * upstream by checking for undefined in the composed input.
+ */
 function composeInput(
-  stage: { inputFrom?: string[] },
+  stage: { id: string; inputFrom?: string[] },
+  knownStageIds: Set<string>,
   ctx: PipelineContext,
   initialInput: unknown,
 ): unknown {
   if (!stage.inputFrom || stage.inputFrom.length === 0) return initialInput;
   const composed: Record<string, unknown> = {};
   for (const sourceId of stage.inputFrom) {
+    if (!knownStageIds.has(sourceId)) {
+      throw new Error(
+        `Stage "${stage.id}" references unknown inputFrom stage "${sourceId}"`,
+      );
+    }
     composed[sourceId] = ctx.stageOutputs.get(sourceId);
   }
   return composed;
@@ -48,11 +62,14 @@ export async function runPipeline(
   const ctx: PipelineContext = {
     specName: spec.name,
     runId: generateRunId(),
+    // stageOutputs accumulates across all iterations — see composeInput note above
     stageOutputs: new Map(),
     iteration: 0,
     startedAt: performance.now(),
     stopped: false,
   };
+
+  const knownStageIds = new Set(spec.stages.map((s) => s.id));
 
   emit(PIPELINE_EVENTS.STARTED, {
     runId: ctx.runId,
@@ -60,12 +77,16 @@ export async function runPipeline(
     iteration: 1,
   });
 
+  // Tracks the last-attempted stage so pipeline:failed has accurate context
+  let currentStageId = '<pre-loop>';
+
   try {
     for (let i = 0; i < spec.termination.maxIterations; i++) {
       ctx.iteration = i + 1;
 
       for (const stage of spec.stages) {
-        const input = composeInput(stage, ctx, initialInput);
+        currentStageId = stage.id;
+        const input = composeInput(stage, knownStageIds, ctx, initialInput);
 
         if (stage.policy === 'fanout') {
           await executeFanoutStage(stage, ctx, input, broker.resolveAll, emit);
@@ -74,11 +95,19 @@ export async function runPipeline(
         }
       }
 
-      // Check stop condition
+      // Check stop condition after all stages complete for this iteration
       if (spec.termination.stopCondition) {
-        const checker = broker.resolve(spec.termination.stopCondition.capability) as
-          (ctx: { iteration: number; stageOutputs: Map<string, unknown> }) => boolean;
-        if (checker({ iteration: ctx.iteration, stageOutputs: ctx.stageOutputs })) {
+        currentStageId = '<stop-condition>';
+        const cap = spec.termination.stopCondition.capability;
+        const checker = broker.resolve(cap);
+        if (typeof checker !== 'function') {
+          throw new Error(
+            `Stop condition "${cap}" did not resolve to a function`,
+          );
+        }
+        if ((checker as (ctx: { iteration: number; stageOutputs: Map<string, unknown> }) => boolean)(
+          { iteration: ctx.iteration, stageOutputs: ctx.stageOutputs },
+        )) {
           ctx.stopped = true;
           break;
         }
@@ -115,7 +144,7 @@ export async function runPipeline(
     emit(PIPELINE_EVENTS.FAILED, {
       runId: ctx.runId,
       specName: spec.name,
-      failedStageId: 'unknown',
+      failedStageId: currentStageId,
       error: err instanceof Error ? err.message : String(err),
     });
     throw err;

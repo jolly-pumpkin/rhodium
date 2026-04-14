@@ -137,7 +137,7 @@ describe('runPipeline', () => {
     expect(result.stopped).toBe(true);
   });
 
-  it('emits pipeline:failed on stage error with fail-fast', async () => {
+  it('emits pipeline:failed on stage error with fail-fast, including stage id', async () => {
     const spec: PipelineSpec = {
       name: 'failing',
       stages: [
@@ -156,6 +156,71 @@ describe('runPipeline', () => {
       runPipeline(spec, {}, broker, (e, p) => events.push({ event: e, payload: p })),
     ).rejects.toThrow('kaboom');
 
-    expect(events.some((e) => e.event === 'pipeline:failed')).toBe(true);
+    const failedEvent = events.find((e) => e.event === 'pipeline:failed');
+    expect(failedEvent).toBeDefined();
+    expect((failedEvent?.payload as { failedStageId: string }).failedStageId).toBe('boom');
+  });
+
+  it('throws on unknown inputFrom stage id', async () => {
+    const spec: PipelineSpec = {
+      name: 'bad-ref',
+      stages: [
+        { id: 'a', capability: 'cap-a', policy: 'single', errorPolicy: 'fail-fast' },
+        { id: 'b', capability: 'cap-b', policy: 'single', errorPolicy: 'fail-fast', inputFrom: ['nonexistent'] },
+      ],
+      termination: { maxIterations: 1 },
+    };
+
+    const broker = createMockBrokerFacade({
+      'cap-a': () => 'a-out',
+      'cap-b': () => 'b-out',
+    });
+
+    await expect(
+      runPipeline(spec, {}, broker, () => {}),
+    ).rejects.toThrow(/unknown inputFrom stage/);
+  });
+
+  it('accumulates stageOutputs across iterations for multi-iteration pipelines', async () => {
+    const spec: PipelineSpec = {
+      name: 'multi-iter',
+      stages: [
+        { id: 'counter', capability: 'increment', policy: 'single', errorPolicy: 'fail-fast' },
+        { id: 'reader', capability: 'read-counter', policy: 'single', errorPolicy: 'fail-fast', inputFrom: ['counter'] },
+      ],
+      termination: { maxIterations: 2 },
+    };
+
+    let count = 0;
+    const broker = createMockBrokerFacade({
+      increment: () => ++count,
+      'read-counter': (input: unknown) => (input as { counter: number }).counter,
+    });
+
+    const result = await runPipeline(spec, {}, broker, () => {});
+
+    // After 2 iterations the counter stage ran twice; stageOutputs holds iteration 2's value
+    expect(result.stageOutputs.get('counter')).toBe(2);
+    expect(result.stageOutputs.get('reader')).toBe(2);
+    expect(result.iteration).toBe(2);
+  });
+
+  it('throws when stop-condition capability resolves to a non-function', async () => {
+    const spec: PipelineSpec = {
+      name: 'bad-stopper',
+      stages: [
+        { id: 'step', capability: 'worker', policy: 'single', errorPolicy: 'fail-fast' },
+      ],
+      termination: { maxIterations: 5, stopCondition: { capability: 'not-a-fn' } },
+    };
+
+    const broker = createMockBrokerFacade({
+      worker: () => 'done',
+      'not-a-fn': 'oops',
+    });
+
+    await expect(
+      runPipeline(spec, {}, broker, () => {}),
+    ).rejects.toThrow(/did not resolve to a function/);
   });
 });

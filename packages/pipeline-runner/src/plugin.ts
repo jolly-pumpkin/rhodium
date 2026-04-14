@@ -24,6 +24,11 @@ export function createPipelineRunnerPlugin(): Plugin {
           const brokerFacade = {
             resolve: (cap: string) => ctx.resolve(cap),
             resolveAll: (cap: string): ProviderHandle[] => {
+              // PluginContext.resolveAll returns bare implementations sorted by broker priority
+              // (highest first). We assign priority: 0 to all since the broker doesn't expose
+              // priority metadata through this API — the broker's pre-sort order is preserved,
+              // meaning priority-pick will still select the highest-priority provider (index 0),
+              // but provider:selected event payloads will always show priority: 0.
               const impls = ctx.resolveAll<unknown>(cap);
               return impls.map((impl, i) => ({
                 id: `${cap}-${i}`,
