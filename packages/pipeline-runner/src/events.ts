@@ -26,23 +26,28 @@ export const PROVIDER_EVENTS = {
 export interface PipelineStartedPayload {
   runId: string;
   specName: string;
+  /** The iteration number about to begin (1-indexed). */
   iteration: number;
 }
 
 export interface PipelineCompletePayload {
   runId: string;
+  specName: string;
   durationMs: number;
   stageCount: number;
 }
 
 export interface PipelineFailedPayload {
   runId: string;
+  specName: string;
   failedStageId: string;
   error: string;
 }
 
 export interface PipelineHaltedPayload {
   runId: string;
+  specName: string;
+  /** The iteration count reached when the limit was hit. */
   iteration: number;
 }
 
@@ -59,12 +64,14 @@ export interface StageCompletePayload {
   durationMs: number;
 }
 
+/** Stage never ran — provider was missing and errorPolicy was 'skip'. */
 export interface StageSkippedPayload {
   runId: string;
   stageId: string;
   reason: string;
 }
 
+/** Stage ran partially — some providers failed but errorPolicy was 'fall-through'. */
 export interface StageDegradedPayload {
   runId: string;
   stageId: string;
