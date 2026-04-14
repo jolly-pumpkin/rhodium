@@ -1,4 +1,6 @@
 // Pipeline runner — barrel export (populated as modules are added)
+export { createPipelineRunnerPlugin } from './plugin.js';
+export type { PipelineRunner } from './plugin.js';
 export { runPipeline } from './runner.js';
 export type { PipelineResult, BrokerFacade } from './runner.js';
 export { executeSingleStage, executeFanoutStage } from './stage.js';
