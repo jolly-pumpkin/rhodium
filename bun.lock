@@ -27,6 +27,13 @@
         "rhodium-core": "workspace:*",
       },
     },
+    "packages/pipeline-runner": {
+      "name": "rhodium-pipeline-runner",
+      "version": "0.1.0",
+      "dependencies": {
+        "rhodium-core": "workspace:*",
+      },
+    },
     "packages/rhodium": {
       "name": "rhodium",
       "version": "0.2.0",
@@ -34,6 +41,7 @@
         "rhodium-capabilities": "workspace:*",
         "rhodium-core": "workspace:*",
         "rhodium-graph": "workspace:*",
+        "rhodium-pipeline-runner": "workspace:*",
         "rhodium-testing": "workspace:*",
       },
     },
@@ -59,6 +67,8 @@
     "rhodium-core": ["rhodium-core@workspace:packages/core"],
 
     "rhodium-graph": ["rhodium-graph@workspace:packages/graph"],
+
+    "rhodium-pipeline-runner": ["rhodium-pipeline-runner@workspace:packages/pipeline-runner"],
 
     "rhodium-testing": ["rhodium-testing@workspace:packages/testing"],
 
