@@ -25,6 +25,10 @@
     "./testing": {
       "types": "./dist/testing.d.ts",
       "import": "./dist/testing.js"
+    },
+    "./pipeline-runner": {
+      "types": "./dist/pipeline-runner.d.ts",
+      "import": "./dist/pipeline-runner.js"
     }
   },
   "scripts": {
@@ -36,6 +40,7 @@
     "rhodium-core": "workspace:*",
     "rhodium-capabilities": "workspace:*",
     "rhodium-graph": "workspace:*",
+    "rhodium-pipeline-runner": "workspace:*",
     "rhodium-testing": "workspace:*"
   }
 }

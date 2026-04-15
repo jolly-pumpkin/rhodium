@@ -25,3 +25,20 @@ export { createDependencyGraph, createCapabilityResolver } from 'rhodium-graph';
 
 // ── Testing utilities (mock context, test broker) ────────────────────────
 export * from 'rhodium-testing';
+
+// ── Pipeline Runner ───────────────────────────────────────────────────────
+export { createPipelineRunnerPlugin, runPipeline } from 'rhodium-pipeline-runner';
+export { PIPELINE_EVENTS, STAGE_EVENTS, PROVIDER_EVENTS } from 'rhodium-pipeline-runner';
+export type {
+  PipelineSpec,
+  StageSpec,
+  TerminationPolicy,
+  PipelineContext,
+  PipelineResult,
+  PipelineRunner,
+  BrokerFacade,
+  ProviderHandle,
+  ReducerRef,
+  ErrorPolicy,
+  SchemaRef,
+} from 'rhodium-pipeline-runner';

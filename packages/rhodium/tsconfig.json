@@ -8,7 +8,8 @@
       "rhodium-core": ["../core/dist/index.d.ts"],
       "rhodium-capabilities": ["../capabilities/dist/index.d.ts"],
       "rhodium-graph": ["../graph/dist/index.d.ts"],
-      "rhodium-testing": ["../testing/dist/index.d.ts"]
+      "rhodium-testing": ["../testing/dist/index.d.ts"],
+      "rhodium-pipeline-runner": ["../pipeline-runner/dist/index.d.ts"]
     }
   },
   "include": ["src/**/*"],
