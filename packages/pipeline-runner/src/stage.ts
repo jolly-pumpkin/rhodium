@@ -40,13 +40,22 @@ export async function executeSingleStage(
     );
   }
 
-  // Resolve provider — skip applies to resolution failure
+  // Resolve provider
   let provider: unknown;
   try {
     provider = resolve(stage.capability);
   } catch (err) {
     if (stage.errorPolicy === 'skip') {
       emit(STAGE_EVENTS.SKIPPED, {
+        runId: ctx.runId,
+        stageId: stage.id,
+        reason: `Provider not found for "${stage.capability}"`,
+      });
+      return;
+    }
+    if (stage.errorPolicy === 'fall-through') {
+      ctx.stageOutputs.set(stage.id, null);
+      emit(STAGE_EVENTS.DEGRADED, {
         runId: ctx.runId,
         stageId: stage.id,
         reason: `Provider not found for "${stage.capability}"`,
@@ -70,13 +79,22 @@ export async function executeSingleStage(
     priority: 0,
   });
 
-  // Invoke provider — skip also applies to execution failure
+  // Invoke provider
   let output: unknown;
   try {
     output = await (provider as (input: unknown) => unknown)(input);
   } catch (err) {
     if (stage.errorPolicy === 'skip') {
       emit(STAGE_EVENTS.SKIPPED, {
+        runId: ctx.runId,
+        stageId: stage.id,
+        reason: `Provider execution failed for "${stage.capability}"`,
+      });
+      return;
+    }
+    if (stage.errorPolicy === 'fall-through') {
+      ctx.stageOutputs.set(stage.id, null);
+      emit(STAGE_EVENTS.DEGRADED, {
         runId: ctx.runId,
         stageId: stage.id,
         reason: `Provider execution failed for "${stage.capability}"`,
@@ -128,13 +146,39 @@ export async function executeFanoutStage(
 
   const providers = resolveAll(stage.capability);
 
+  // Distinct case: no providers registered at all (different from all-failed)
+  if (providers.length === 0) {
+    emit(PROVIDER_EVENTS.FANOUT_STARTED, { runId: ctx.runId, stageId: stage.id, providerCount: 0 });
+    emit(PROVIDER_EVENTS.FANOUT_COMPLETE, { runId: ctx.runId, stageId: stage.id, successCount: 0, failureCount: 0 });
+    if (stage.errorPolicy === 'skip') {
+      emit(STAGE_EVENTS.SKIPPED, {
+        runId: ctx.runId,
+        stageId: stage.id,
+        reason: `No providers registered for "${stage.capability}"`,
+      });
+      return;
+    }
+    if (stage.errorPolicy === 'fall-through') {
+      ctx.stageOutputs.set(stage.id, null);
+      emit(STAGE_EVENTS.DEGRADED, {
+        runId: ctx.runId,
+        stageId: stage.id,
+        reason: `No providers registered for "${stage.capability}"`,
+      });
+      return;
+    }
+    throw new Error(
+      `Stage "${stage.id}": no providers registered for "${stage.capability}"`,
+    );
+  }
+
   emit(PROVIDER_EVENTS.FANOUT_STARTED, {
     runId: ctx.runId,
     stageId: stage.id,
     providerCount: providers.length,
   });
 
-  // Invoke all providers in parallel with per-provider error boundaries
+  // Invoke all providers in parallel; capture provider ID in rejected results
   const settled = await Promise.allSettled(
     providers.map(async (p) => {
       emit(PROVIDER_EVENTS.SELECTED, {
@@ -143,8 +187,12 @@ export async function executeFanoutStage(
         providerId: p.id,
         priority: p.priority,
       });
-      const result = await p.impl(input);
-      return { providerId: p.id, priority: p.priority, output: result } satisfies FanoutResult;
+      try {
+        const result = await p.impl(input);
+        return { providerId: p.id, priority: p.priority, output: result } satisfies FanoutResult;
+      } catch (err) {
+        return Promise.reject({ providerId: p.id, error: err });
+      }
     }),
   );
 
@@ -156,11 +204,12 @@ export async function executeFanoutStage(
       successes.push(result.value);
     } else {
       failureCount++;
+      const reason = result.reason as { providerId?: string; error?: unknown };
       emit(PROVIDER_EVENTS.FAILED, {
         runId: ctx.runId,
         stageId: stage.id,
-        providerId: 'unknown',
-        error: String(result.reason),
+        providerId: reason.providerId ?? 'unknown',
+        error: String(reason.error ?? result.reason),
       });
     }
   }

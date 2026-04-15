@@ -53,7 +53,10 @@ export interface PipelineSpec {
   termination: TerminationPolicy;
 }
 
-/** Mutable execution context threaded through a pipeline run. */
+/**
+ * Mutable execution context threaded through a pipeline run.
+ * @internal Do not hold references across runs; the runner mutates this object in-place.
+ */
 export interface PipelineContext {
   specName: string;
   runId: string;

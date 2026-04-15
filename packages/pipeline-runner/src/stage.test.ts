@@ -117,6 +117,42 @@ describe('executeSingleStage', () => {
     ).rejects.toThrow(/validation/i);
   });
 
+  it('sets null output and emits stage:degraded when errorPolicy is fall-through and provider is missing', async () => {
+    const stage: StageSpec = {
+      id: 'degraded',
+      capability: 'nonexistent',
+      policy: 'single',
+      errorPolicy: 'fall-through',
+    };
+
+    const resolve = () => { throw new Error('not found'); };
+    const { emit, events } = createEmitter();
+    const ctx = { ...baseContext, stageOutputs: new Map() };
+
+    await executeSingleStage(stage, ctx, {}, resolve, emit);
+
+    expect(ctx.stageOutputs.get('degraded')).toBeNull();
+    expect(events.some((e) => e.event === 'stage:degraded')).toBe(true);
+  });
+
+  it('sets null output and emits stage:degraded when errorPolicy is fall-through and provider throws', async () => {
+    const stage: StageSpec = {
+      id: 'degraded-exec',
+      capability: 'boom',
+      policy: 'single',
+      errorPolicy: 'fall-through',
+    };
+
+    const resolve = () => () => { throw new Error('execution error'); };
+    const { emit, events } = createEmitter();
+    const ctx = { ...baseContext, stageOutputs: new Map() };
+
+    await executeSingleStage(stage, ctx, {}, resolve, emit);
+
+    expect(ctx.stageOutputs.get('degraded-exec')).toBeNull();
+    expect(events.some((e) => e.event === 'stage:degraded')).toBe(true);
+  });
+
   it('validates output schema and fails fast on mismatch', async () => {
     const failingSchema: SchemaRef = {
       validate: () => ['output field missing'],
@@ -247,6 +283,89 @@ describe('executeFanoutStage', () => {
 
     expect(ctx.stageOutputs.get('all-fail')).toBeNull();
     expect(events.some((e) => e.event === 'stage:degraded')).toBe(true);
+  });
+
+  it('emits provider:failed with correct providerId', async () => {
+    const stage: StageSpec = {
+      id: 'id-check',
+      capability: 'angle',
+      policy: 'fanout',
+      reducer: { kind: 'concat' },
+      errorPolicy: 'fall-through',
+    };
+
+    const providers = [
+      { id: 'good', priority: 10, impl: () => 'ok' },
+      { id: 'bad-provider', priority: 5, impl: () => { throw new Error('boom'); } },
+    ];
+
+    const resolveAll = () => providers;
+    const { emit, events } = createEmitter();
+    const ctx = { ...baseContext, stageOutputs: new Map() };
+
+    await executeFanoutStage(stage, ctx, {}, resolveAll, emit);
+
+    const failedEvent = events.find((e) => e.event === 'provider:failed');
+    expect(failedEvent).toBeDefined();
+    expect((failedEvent!.payload as { providerId: string }).providerId).toBe('bad-provider');
+  });
+
+  it('emits stage:skipped for zero providers when errorPolicy is skip', async () => {
+    const stage: StageSpec = {
+      id: 'no-providers-skip',
+      capability: 'angle',
+      policy: 'fanout',
+      reducer: { kind: 'concat' },
+      errorPolicy: 'skip',
+    };
+
+    const resolveAll = () => [];
+    const { emit, events } = createEmitter();
+    const ctx = { ...baseContext, stageOutputs: new Map() };
+
+    await executeFanoutStage(stage, ctx, {}, resolveAll, emit);
+
+    expect(ctx.stageOutputs.has('no-providers-skip')).toBe(false);
+    expect(events.some((e) => e.event === 'stage:skipped')).toBe(true);
+    const skipped = events.find((e) => e.event === 'stage:skipped');
+    expect((skipped!.payload as { reason: string }).reason).toMatch(/No providers registered/);
+  });
+
+  it('emits stage:degraded for zero providers when errorPolicy is fall-through', async () => {
+    const stage: StageSpec = {
+      id: 'no-providers-degrade',
+      capability: 'angle',
+      policy: 'fanout',
+      reducer: { kind: 'concat' },
+      errorPolicy: 'fall-through',
+    };
+
+    const resolveAll = () => [];
+    const { emit, events } = createEmitter();
+    const ctx = { ...baseContext, stageOutputs: new Map() };
+
+    await executeFanoutStage(stage, ctx, {}, resolveAll, emit);
+
+    expect(ctx.stageOutputs.get('no-providers-degrade')).toBeNull();
+    expect(events.some((e) => e.event === 'stage:degraded')).toBe(true);
+  });
+
+  it('throws for zero providers when errorPolicy is fail-fast', async () => {
+    const stage: StageSpec = {
+      id: 'no-providers-fail',
+      capability: 'angle',
+      policy: 'fanout',
+      reducer: { kind: 'concat' },
+      errorPolicy: 'fail-fast',
+    };
+
+    const resolveAll = () => [];
+    const { emit } = createEmitter();
+    const ctx = { ...baseContext, stageOutputs: new Map() };
+
+    await expect(
+      executeFanoutStage(stage, ctx, {}, resolveAll, emit),
+    ).rejects.toThrow(/no providers registered/i);
   });
 
   it('throws when all providers fail with fail-fast policy', async () => {

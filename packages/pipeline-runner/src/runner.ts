@@ -10,12 +10,6 @@ export interface BrokerFacade {
 
 type EmitFn = (event: string, payload: unknown) => void;
 
-let runCounter = 0;
-
-function generateRunId(): string {
-  return `run-${++runCounter}-${Date.now()}`;
-}
-
 /**
  * Compose stage input from inputFrom references or fall back to initial input.
  *
@@ -61,10 +55,10 @@ export async function runPipeline(
 ): Promise<PipelineResult> {
   const ctx: PipelineContext = {
     specName: spec.name,
-    runId: generateRunId(),
+    runId: crypto.randomUUID(),
     // stageOutputs accumulates across all iterations — see composeInput note above
     stageOutputs: new Map(),
-    iteration: 0,
+    iteration: 1,
     startedAt: performance.now(),
     stopped: false,
   };
@@ -74,7 +68,7 @@ export async function runPipeline(
   emit(PIPELINE_EVENTS.STARTED, {
     runId: ctx.runId,
     specName: spec.name,
-    iteration: 1,
+    iteration: ctx.iteration,
   });
 
   // Tracks the last-attempted stage so pipeline:failed has accurate context
